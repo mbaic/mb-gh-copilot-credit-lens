@@ -1,10 +1,10 @@
 name: Release
 
 # Build and publish a VSIX as a GitHub Release.
-#  - Push to main: releases automatically when package.json version is new
-#    (a version already released is skipped, so non-bump commits don't duplicate).
-#  - Push a vX.Y.Z tag: always releases that tag.
-#  - Run manually (workflow_dispatch): tag is derived from package.json.
+#  - Push to main: every commit releases a new, auto-incremented version
+#    (v<major>.<minor>.<run_number>), where major.minor come from package.json.
+#  - Push a vX.Y.Z tag: releases that exact tag/version.
+#  - Run manually (workflow_dispatch): same auto-increment as a main push.
 on:
   push:
     branches:
@@ -35,34 +35,33 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
 
+      - name: Determine version
+        id: meta
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Tag push: use the tag verbatim.
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          else
+            # main push / manual: keep major.minor from package.json, use the
+            # workflow run number as a unique, increasing patch.
+            BASE="$(node -p "require('./package.json').version")"
+            MAJOR_MINOR="$(echo "${BASE}" | cut -d. -f1,2)"
+            VERSION="${MAJOR_MINOR}.${GITHUB_RUN_NUMBER}"
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Release version: ${VERSION} (tag ${TAG})"
+
+      - name: Stamp version into package.json
+        run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version --allow-same-version
+
       - name: Compile TypeScript
         run: npm run compile
 
-      - name: Determine release tag
-        id: meta
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            TAG="${GITHUB_REF_NAME}"
-            PROCEED=true
-          else
-            VERSION="$(node -p "require('./package.json').version")"
-            TAG="v${VERSION}"
-            if gh release view "${TAG}" >/dev/null 2>&1; then
-              echo "Release ${TAG} already exists — skipping (bump the version in package.json to release)."
-              PROCEED=false
-            else
-              PROCEED=true
-            fi
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "proceed=${PROCEED}" >> "$GITHUB_OUTPUT"
-          echo "Release tag: ${TAG} (proceed=${PROCEED})"
-
       - name: Package VSIX
         id: package
-        if: steps.meta.outputs.proceed == 'true'
         run: |
           npx --yes @vscode/vsce@latest package
           VSIX_PATH="$(ls -1 *.vsix | head -n 1)"
@@ -70,7 +69,6 @@ jobs:
           echo "Packaged: ${VSIX_PATH}"
 
       - name: Create GitHub Release and upload VSIX
-        if: steps.meta.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

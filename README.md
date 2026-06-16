@@ -104,13 +104,13 @@ Press **F5** in VS Code to launch the Extension Development Host. Package a VSIX
 
 ## Release process
 
-Bump `version` in `package.json` and add a `CHANGELOG.md` entry. A release is then produced automatically:
+Releases are produced automatically by CI (`npm ci` → `npm audit` → version stamp → compile → `vsce package` → GitHub Release with the `.vsix` attached):
 
-- **On every push to `main`** — CI publishes a new GitHub Release when the `package.json` version has not been released yet. Commits that don't change the version are built and validated but skip the release step (no duplicate releases).
-- **On a `vX.Y.Z` tag** — always releases that exact tag.
-- **Manually** — run the **Release** workflow (`workflow_dispatch`); the tag is derived from `package.json`.
+- **Every push to `main`** publishes a new GitHub Release with an auto-incremented version `v<major>.<minor>.<run_number>` — the `major.minor` come from `package.json`, and the patch is the workflow run number, so each commit gets a unique, increasing version with no manual bump.
+- **A `vX.Y.Z` tag** releases that exact version.
+- **Manual run** (`workflow_dispatch`) behaves like a `main` push.
 
-In all cases CI runs `npm ci` → `npm audit` → compile → `vsce package` and attaches the `.vsix` to the Release (filename derived from `package.json`).
+To start a new minor/major line (e.g. `0.2.x`), bump `major.minor` in `package.json` and add a `CHANGELOG.md` entry; the next push continues numbering from there.
 
 ## Security
 

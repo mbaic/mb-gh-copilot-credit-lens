@@ -82,10 +82,14 @@ and `readSettings()` in `extension.ts` (plus the consumer that uses it).
 
 ## Release
 
-Bump `version` in `package.json`, add a `CHANGELOG.md` entry, then either push a
-`vX.Y.Z` tag or run the **Release** workflow (`.github/workflows/release.yml`)
-manually — it derives the tag from `package.json`, runs audit + compile, packages
-the VSIX, and attaches it to a GitHub Release. v0.1.0 was the first release.
+Every push to `main` auto-publishes a release via `.github/workflows/release.yml`:
+the version is `v<major>.<minor>.<run_number>` (major.minor from `package.json`,
+patch = workflow run number), so each commit ships a unique, increasing version
+with no manual bump or commit-back. A `vX.Y.Z` tag releases that exact version;
+manual `workflow_dispatch` behaves like a `main` push. CI runs audit → version
+stamp → compile → `vsce package` → GitHub Release with the `.vsix`. To open a new
+minor/major line, bump `major.minor` in `package.json` and add a `CHANGELOG.md`
+entry. v0.1.x is the first line.
 
 Develop on the designated feature branch, then merge to `main`.
 
