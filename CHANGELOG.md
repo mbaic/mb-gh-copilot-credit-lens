@@ -3,6 +3,28 @@
 All notable changes to **GitHub Copilot Credit Lens** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.x] - 2026-06-16
+
+Fix: match the real VS Code Copilot agent debug-log schema.
+
+### Fixed
+- **Usage was not being ingested** (scan reported files found but 0 entries).
+  Agent debug logs (`debug-logs/**/main.jsonl`, `runSubagent-*.jsonl`,
+  `searchSubagent-*.jsonl`) record each call as a span event with usage under an
+  **`attrs`** object (`attrs.copilotUsageNanoAiu`, `attrs.inputTokens`,
+  `attrs.outputTokens`, `attrs.cachedTokens`, `attrs.model`, `type:"llm_request"`,
+  `ts`). The parser now reads the `attrs` scope, so exact credits are captured.
+- Timestamps that aren't plausible epoch values fall back to the file mtime
+  instead of landing entries in 1970.
+
+### Changed
+- Model rate-table prefixes updated for current ids (`claude-sonnet-4.6`,
+  `gpt-4o-mini`, `gemini-*`, …).
+- `includeChatSessions` now defaults to **off**: chat-session files carry no
+  exact billing value and overlap the same session GUIDs as the debug logs
+  (which are the authoritative meter), so scanning them would double-count.
+  Reserved for future token-only estimation.
+
 ## [0.1.0] - 2026-06-16
 
 Initial release.

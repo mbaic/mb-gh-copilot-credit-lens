@@ -118,8 +118,8 @@
         },
         "copilotCreditLens.includeChatSessions": {
           "type": "boolean",
-          "default": true,
-          "description": "Parse VS Code Copilot Chat session logs (chatSessions/*.jsonl)."
+          "default": false,
+          "description": "Parse VS Code Copilot Chat session logs (chatSessions/*.jsonl). Off by default: these files carry no exact billing value and overlap the same sessions as the agent debug logs, so the debug logs are used as the authoritative meter. Reserved for future token-only estimation."
         },
         "copilotCreditLens.includeDebugLogs": {
           "type": "boolean",

@@ -96,7 +96,7 @@ function readSettings(): Settings {
     statusBarEnabled: c.get('statusBarEnabled', true),
     defaultPeriod: c.get<PeriodId>('defaultPeriod', 'currentMonth'),
     includeEstimated: c.get('includeEstimated', false),
-    includeChat: c.get('includeChatSessions', true),
+    includeChat: c.get('includeChatSessions', false),
     includeDebug: c.get('includeDebugLogs', true),
     includeCli: c.get('includeCliSessions', true),
     additionalRoots: c.get<string[]>('additionalRoots', [])

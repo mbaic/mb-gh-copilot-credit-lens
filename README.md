@@ -73,8 +73,8 @@ All under `copilotCreditLens.*`:
 | `statusBarEnabled` | `true` | Show the credit total in the status bar |
 | `defaultPeriod` | `currentMonth` | Period selected when the dashboard opens |
 | `includeEstimated` | `false` | Include estimated credits in totals by default |
-| `includeChatSessions` | `true` | Parse Chat session logs |
-| `includeDebugLogs` | `true` | Parse agent debug logs |
+| `includeChatSessions` | `false` | Parse Chat session logs (reserved; debug logs are the authoritative meter — see below) |
+| `includeDebugLogs` | `true` | Parse agent debug logs — the source of exact credits |
 | `includeCliSessions` | `true` | Parse Copilot CLI logs |
 | `additionalRoots` | `[]` | Extra VS Code `User` storage roots (other profiles / Insiders) |
 

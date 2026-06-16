@@ -7,10 +7,13 @@
 // one-line edit with no ripple. Estimated figures are always labelled as such
 // in the UI and never silently merged into exact totals unless the user opts in.
 
-/** Premium-request multipliers keyed by a normalized model id. */
+// Matched by longest known prefix against the lowercased model id, so version
+// suffixes (e.g. "claude-sonnet-4.6", "gpt-4o-mini-2024-07-18") need no entry.
+/** Premium-request multipliers keyed by a normalized model family prefix. */
 const MODEL_MULTIPLIERS: Record<string, number> = {
+  'gpt-4o-mini': 0,
   'gpt-4o': 0,
-  'gpt-4-1': 0,
+  'gpt-4.1': 0,
   'gpt-5-mini': 0,
   'gpt-5': 1,
   'o3-mini': 1,
@@ -19,8 +22,7 @@ const MODEL_MULTIPLIERS: Record<string, number> = {
   'claude-haiku': 1,
   'claude-sonnet': 1,
   'claude-opus': 10,
-  'gemini-flash': 0.25,
-  'gemini-pro': 1
+  'gemini': 0.25
 };
 
 /** Fallback multiplier for models not present in the table. */

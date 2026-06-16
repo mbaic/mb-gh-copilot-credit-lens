@@ -75,9 +75,11 @@ function toEntry(obj: unknown, file: DiscoveredFile, fallbackTs: string): UsageE
   if (!isRecord(obj)) {
     return null;
   }
-  // Usage figures may sit at the top level or under a nested usage object.
+  // Usage figures may sit at the top level or under a nested object. VS Code
+  // agent debug logs put them under `attrs` (with type==="llm_request"); other
+  // shapes use `usage`/`response`/`data`/`metrics`.
   const scopes: Record<string, unknown>[] = [obj];
-  for (const key of ['usage', 'response', 'data', 'metrics']) {
+  for (const key of ['attrs', 'usage', 'response', 'data', 'metrics']) {
     const nested = obj[key];
     if (isRecord(nested)) {
       scopes.push(nested);
@@ -88,7 +90,7 @@ function toEntry(obj: unknown, file: DiscoveredFile, fallbackTs: string): UsageE
     }
   }
 
-  const model = pickString(scopes, ['model', 'modelId', 'model_id', 'modelName']);
+  const model = pickString(scopes, ['model', 'modelId', 'model_id', 'modelName', 'resolvedModel']);
   const nanoAiu = pickNumber(scopes, ['copilotUsageNanoAiu', 'usageNanoAiu', 'nanoAiu']);
   const inputTokens = pickNumber(scopes, [
     'inputTokens', 'promptTokens', 'input_tokens', 'prompt_tokens', 'promptTokenCount'
@@ -172,19 +174,23 @@ function pickNumber(scopes: Record<string, unknown>[], keys: string[]): number |
   return undefined;
 }
 
-/** Accept epoch milliseconds, epoch seconds, or an ISO string. */
+/** Accept epoch milliseconds, epoch seconds, or an ISO string. Implausible
+ *  values (e.g. monotonic/relative numbers) fall back to the file's mtime so a
+ *  bad timestamp never lands an entry in 1970 and skews period filtering. */
 function normalizeTimestamp(raw: unknown, fallback: string): string {
+  let ms: number | undefined;
   if (typeof raw === 'number' && Number.isFinite(raw)) {
-    const ms = raw < 1e12 ? raw * 1000 : raw;
-    const date = new Date(ms);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toISOString();
+    ms = raw < 1e12 ? raw * 1000 : raw;
+  } else if (typeof raw === 'string') {
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) {
+      ms = parsed;
     }
   }
-  if (typeof raw === 'string') {
-    const date = new Date(raw);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toISOString();
+  if (ms !== undefined) {
+    const year = new Date(ms).getUTCFullYear();
+    if (year >= 2015 && year <= 2100) {
+      return new Date(ms).toISOString();
     }
   }
   return fallback;
