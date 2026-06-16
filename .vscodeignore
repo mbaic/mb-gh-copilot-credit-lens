@@ -1,0 +1,21 @@
+# Only compiled JS in out/ ships in the VSIX. This extension has zero runtime
+# dependencies, so node_modules is excluded entirely (vsce strips devDeps anyway).
+src/**
+**/*.ts
+**/*.map
+node_modules/**
+
+# Tooling & config not needed at runtime
+.vscode/**
+.vscode-test/**
+.github/**
+.temp/**
+.gitignore
+.vscodeignore
+tsconfig.json
+package-lock.json
+CLAUDE.md
+ROADMAP.md
+
+# Build artifacts
+*.vsix

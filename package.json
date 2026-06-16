@@ -1,0 +1,156 @@
+{
+  "name": "mb-gh-copilot-credit-lens",
+  "displayName": "GitHub Copilot Credit Lens",
+  "description": "Local-first GitHub Copilot credit & token usage tracker for VS Code. Reads local session logs, keeps its own ledger, and shows analytics. No API. No telemetry. Fully offline.",
+  "version": "0.1.0",
+  "publisher": "MBS",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "copilot",
+    "credits",
+    "tokens",
+    "usage",
+    "analytics",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mbaic/mb-gh-copilot-credit-lens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mbaic/mb-gh-copilot-credit-lens/issues"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copilotCreditLens.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.syncNow",
+        "title": "Sync Now",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.resetPeriod",
+        "title": "Reset Period (add marker)",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.exportCsv",
+        "title": "Export Usage to CSV",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.clearLedger",
+        "title": "Clear All Data",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.enableDebugLogging",
+        "title": "Enable Copilot Agent Debug Logging",
+        "category": "Copilot Credit Lens"
+      }
+    ],
+    "configuration": {
+      "title": "GitHub Copilot Credit Lens",
+      "properties": {
+        "copilotCreditLens.autoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run a full backfill scan of local Copilot logs when VS Code starts."
+        },
+        "copilotCreditLens.watcherEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch local Copilot log folders and ingest new usage incrementally while VS Code is open."
+        },
+        "copilotCreditLens.openOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the dashboard automatically when VS Code starts."
+        },
+        "copilotCreditLens.statusBarEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a compact credit total for the current period in the status bar."
+        },
+        "copilotCreditLens.defaultPeriod": {
+          "type": "string",
+          "enum": [
+            "currentMonth",
+            "last3Months",
+            "last6Months",
+            "last9Months",
+            "last12Months",
+            "sinceReset",
+            "allTime"
+          ],
+          "enumDescriptions": [
+            "First day of the current month through today.",
+            "Rolling last 90 days.",
+            "Rolling last 180 days.",
+            "Rolling last 270 days.",
+            "Rolling last 365 days.",
+            "From the most recent reset marker through today.",
+            "Every entry in the ledger."
+          ],
+          "default": "currentMonth",
+          "description": "Period the dashboard selects on open."
+        },
+        "copilotCreditLens.includeEstimated": {
+          "type": "boolean",
+          "default": false,
+          "description": "When on, dashboard totals include estimated credits for records that lack an exact billing value. When off, only exact credits are counted (estimates are still shown as a separate, clearly-labelled statistic).",
+          "markdownDescription": "When on, dashboard totals include **estimated** credits for records that have no exact `copilotUsageNanoAiu` billing value. When off (default), totals count **exact credits only** — estimates remain visible as a separate, clearly-labelled statistic. This is a default; the dashboard has its own toggle."
+        },
+        "copilotCreditLens.includeChatSessions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Parse VS Code Copilot Chat session logs (chatSessions/*.jsonl)."
+        },
+        "copilotCreditLens.includeDebugLogs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Parse VS Code Copilot agent debug logs (requires github.copilot.chat.agentDebugLog.fileLogging.enabled)."
+        },
+        "copilotCreditLens.includeCliSessions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Parse GitHub Copilot CLI session logs (~/.copilot/session-state/*/events.jsonl)."
+        },
+        "copilotCreditLens.additionalRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra VS Code 'User' storage roots to scan (e.g. other profiles or Insiders). Point at the folder that contains 'workspaceStorage'."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "audit": "npm audit --audit-level=moderate"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.0",
+    "@types/vscode": "1.90.0",
+    "typescript": "5.4.5"
+  }
+}

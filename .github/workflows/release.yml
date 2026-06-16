@@ -1,0 +1,65 @@
+name: Release
+
+# Build and publish a VSIX as a GitHub Release.
+#  - Push a vX.Y.Z tag (preferred), or
+#  - Run manually (workflow_dispatch); the tag is derived from package.json.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies (clean, from lockfile)
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Determine release tag
+        id: meta
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${TAG}"
+
+      - name: Package VSIX
+        id: package
+        run: |
+          npx --yes @vscode/vsce@latest package
+          VSIX_PATH="$(ls -1 *.vsix | head -n 1)"
+          echo "vsix_path=${VSIX_PATH}" >> "$GITHUB_OUTPUT"
+          echo "Packaged: ${VSIX_PATH}"
+
+      - name: Create GitHub Release and upload VSIX
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            "${{ steps.package.outputs.vsix_path }}" \
+            --title "${{ steps.meta.outputs.tag }}" \
+            --target "${GITHUB_SHA}" \
+            --generate-notes

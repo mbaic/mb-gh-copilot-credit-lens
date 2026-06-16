@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Compiled output
+out/
+
+# Packaged extension
+*.vsix
+
+# VS Code test runner
+.vscode-test/
+
+# Logs and OS cruft
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
