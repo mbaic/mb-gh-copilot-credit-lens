@@ -14,6 +14,9 @@ expected value; nothing here is a commitment to a date.
   full dashboard panel, for one-click discoverability.
 - **Configurable credit budget + threshold notification.** Warn when the current
   period crosses a user-set AIU budget.
+- **One-click restore / import.** Import a backup JSON (from **Export Data
+  Backup** or `backupDirectory`) back into the ledger from within VS Code, with
+  merge-or-replace — complements the existing manual/auto backup.
 - **Gap-filled daily chart.** Render zero-activity days for short periods so the
   per-day bar chart reads as a true calendar.
 

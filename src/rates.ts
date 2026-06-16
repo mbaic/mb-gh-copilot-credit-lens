@@ -53,3 +53,11 @@ export function estimateCredits(rawModel: string): number {
   const multiplier = MODEL_MULTIPLIERS[key];
   return multiplier === undefined ? DEFAULT_MULTIPLIER : multiplier;
 }
+
+/** True when the model maps to a known family in the rate table. Unknown models
+ *  still work (exact credits never depend on this table); they just fall back to
+ *  the default multiplier for *estimation*, and the dashboard flags them so the
+ *  table can be updated when GitHub introduces a new model. */
+export function isKnownModel(rawModel: string): boolean {
+  return MODEL_MULTIPLIERS[normalizeModel(rawModel)] !== undefined;
+}

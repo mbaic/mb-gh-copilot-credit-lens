@@ -56,6 +56,7 @@ Open the Command Palette (`Ctrl/Cmd+Shift+P`) → **Copilot Credit Lens:**
 | Sync Now | Full re-scan of all local logs |
 | Reset Period (add marker) | Add a non-destructive period boundary |
 | Export Usage to CSV | Export the selected period's entries |
+| Export Data Backup (JSON) | Save a full, restorable copy of the ledger |
 | Clear All Data | Wipe the ledger (with confirmation) |
 | Enable Copilot Agent Debug Logging | Turn on precise agent credit logging |
 
@@ -77,8 +78,40 @@ All under `copilotCreditLens.*`:
 | `includeDebugLogs` | `true` | Parse agent debug logs — the source of exact credits |
 | `includeCliSessions` | `true` | Parse Copilot CLI logs |
 | `additionalRoots` | `[]` | Extra VS Code `User` storage roots (other profiles / Insiders) |
+| `backupDirectory` | `""` | Folder for automatic ledger backups (empty = off) |
 
 Multiple profiles? Point `additionalRoots` at the other profile's folder that contains `workspaceStorage`.
+
+## Backup & restore
+
+Your data lives in the extension's own ledger (`ledger.json`) under VS Code's
+global storage, written atomically with a one-deep `.backup` copy. Two extra
+safety nets:
+
+- **Manual backup** — run **Export Data Backup (JSON)** to save a full,
+  self-contained copy of the ledger anywhere you like.
+- **Automatic backup** — set `copilotCreditLens.backupDirectory` to a folder
+  (e.g. a synced drive). After any sync that imports new data, a copy is written
+  to `<folder>/copilot-credit-lens-backup.json`.
+
+To **restore**, copy a backup file over `ledger.json` in the extension's global
+storage folder while VS Code is closed (path shown in the Output log).
+
+## Verify / cross-check
+
+To independently confirm the dashboard's numbers, run the bundled PowerShell
+script — it reads the same debug logs and computes the totals on its own:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-usage.ps1
+# multiple profiles:
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-usage.ps1 -AdditionalRoots "C:\Users\you\AppData\Roaming\Code - Insiders\User"
+```
+
+It prints all-time and current-period requests, exact credits, tokens, and a
+by-model table. Compare against the dashboard (period **All time** / **Current
+period**, estimates off). They should match; the script is read-only and makes
+no network calls.
 
 ## Installation (local `.vsix`)
 

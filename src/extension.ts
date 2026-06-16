@@ -4,6 +4,7 @@
 
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import * as fsp from 'fs/promises';
 import { LedgerStore } from './ledger';
 import { runScan, ScanConfig } from './scanner';
@@ -48,6 +49,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('copilotCreditLens.syncNow', () => syncNow(true)),
     vscode.commands.registerCommand('copilotCreditLens.resetPeriod', resetPeriodCmd),
     vscode.commands.registerCommand('copilotCreditLens.exportCsv', exportCsvCmd),
+    vscode.commands.registerCommand('copilotCreditLens.exportBackup', exportBackupCmd),
     vscode.commands.registerCommand('copilotCreditLens.clearLedger', clearLedgerCmd),
     vscode.commands.registerCommand('copilotCreditLens.enableDebugLogging', enableDebugLoggingCmd)
   );
@@ -85,6 +87,7 @@ interface Settings {
   includeDebug: boolean;
   includeCli: boolean;
   additionalRoots: string[];
+  backupDirectory: string;
 }
 
 function readSettings(): Settings {
@@ -99,7 +102,8 @@ function readSettings(): Settings {
     includeChat: c.get('includeChatSessions', false),
     includeDebug: c.get('includeDebugLogs', true),
     includeCli: c.get('includeCliSessions', true),
-    additionalRoots: c.get<string[]>('additionalRoots', [])
+    additionalRoots: c.get<string[]>('additionalRoots', []),
+    backupDirectory: c.get<string>('backupDirectory', '')
   };
 }
 
@@ -136,6 +140,9 @@ async function syncNow(foreground: boolean): Promise<void> {
     if (result.warnings.length) {
       log.appendLine(`  ${result.warnings.length} warning(s):`);
       result.warnings.slice(0, 20).forEach((w) => log.appendLine(`    - ${w}`));
+    }
+    if (settings.backupDirectory && result.added > 0) {
+      await autoBackup(settings.backupDirectory);
     }
     if (foreground) {
       vscode.window.showInformationMessage(`Copilot Credit Lens: imported ${result.added} new usage entr${result.added === 1 ? 'y' : 'ies'}.`);
@@ -288,6 +295,42 @@ async function exportCsvCmd(): Promise<void> {
     }
   } catch (err) {
     vscode.window.showErrorMessage(`Copilot Credit Lens: export failed — ${message(err)}`);
+  }
+}
+
+/** Write a timestamped-name-free backup copy into the configured folder. */
+async function autoBackup(dir: string): Promise<void> {
+  try {
+    await fsp.mkdir(dir, { recursive: true });
+    await ledger.exportTo(path.join(dir, 'copilot-credit-lens-backup.json'));
+    log.appendLine(`Auto-backup written to ${dir}`);
+  } catch (err) {
+    log.appendLine(`Auto-backup failed: ${message(err)}`);
+  }
+}
+
+async function exportBackupCmd(): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  const target = await vscode.window.showSaveDialog({
+    title: 'Export data backup (full ledger)',
+    filters: { 'JSON files': ['json'] },
+    saveLabel: 'Back up',
+    defaultUri: vscode.Uri.file(`copilot-credit-lens-backup-${date}.json`)
+  });
+  if (!target) {
+    return;
+  }
+  try {
+    await ledger.exportTo(target.fsPath);
+    const open = await vscode.window.showInformationMessage(
+      `Copilot Credit Lens: backed up ${ledger.entries.length} entr${ledger.entries.length === 1 ? 'y' : 'ies'}.`,
+      'Open'
+    );
+    if (open === 'Open') {
+      void vscode.window.showTextDocument(target);
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`Copilot Credit Lens: backup failed — ${message(err)}`);
   }
 }
 

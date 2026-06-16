@@ -160,6 +160,14 @@ export class LedgerStore {
     return marker;
   }
 
+  /** Write a self-contained copy of the current ledger to an arbitrary path
+   *  (manual backup or auto-backup). Atomic via temp file + rename. */
+  async exportTo(filePath: string): Promise<void> {
+    const tmp = `${filePath}.tmp`;
+    await fsp.writeFile(tmp, JSON.stringify(this.ledger, null, 2), 'utf8');
+    await fsp.rename(tmp, filePath);
+  }
+
   /** Wipe all data and start a fresh ledger on disk. */
   async clear(): Promise<void> {
     this.ledger = LedgerStore.emptyLedger();

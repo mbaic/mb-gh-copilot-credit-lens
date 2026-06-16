@@ -2,6 +2,7 @@
 // dashboard renders. No VS Code, no I/O — easy to reason about and to test.
 
 import { PeriodId, ResetMarker, UsageEntry } from './types';
+import { isKnownModel } from './rates';
 
 export interface Bucket {
   label: string;
@@ -34,6 +35,9 @@ export interface DashboardData {
     cachedTokens: number;
   };
   estimatedRequestCount: number;
+  /** Models seen in this period that aren't in the rate table (estimates use the
+   *  default multiplier). Surfaced so new GitHub models are noticed automatically. */
+  unknownModels: string[];
   periods: { id: PeriodId; label: string }[];
 }
 
@@ -141,6 +145,9 @@ export function aggregate(
   }
 
   const byModel = sortBuckets(model);
+  const unknownModels = byModel
+    .map((b) => b.label)
+    .filter((label) => label !== 'unknown' && !isKnownModel(label));
   const trust: DashboardData['trust'] =
     scoped.length === 0 ? 'none' : estimatedRequestCount === 0 ? 'exact' : exactCount === 0 ? 'estimated' : 'mixed';
 
@@ -170,6 +177,7 @@ export function aggregate(
       cachedTokens: totals.cachedTokens
     },
     estimatedRequestCount,
+    unknownModels,
     periods: PERIODS
   };
 }

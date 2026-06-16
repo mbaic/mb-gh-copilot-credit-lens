@@ -75,7 +75,7 @@ run `parseFile` → `LedgerStore` → `aggregate` → `toCsv` and assert), then
 
 `autoSync` · `watcherEnabled` · `openOnStartup` · `statusBarEnabled` ·
 `defaultPeriod` · `includeEstimated` · `includeChatSessions` ·
-`includeDebugLogs` · `includeCliSessions` · `additionalRoots`.
+`includeDebugLogs` · `includeCliSessions` · `additionalRoots` · `backupDirectory`.
 
 Adding a setting touches two places: `package.json` (`contributes.configuration`)
 and `readSettings()` in `extension.ts` (plus the consumer that uses it).

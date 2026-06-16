@@ -97,6 +97,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
     <div><span class="muted">Estimated credits</span><b id="tEst">0</b></div>
   </div>
   <p id="estNote" class="muted note"></p>
+  <p id="modelNote" class="muted note"></p>
 </section>
 
 <footer class="foot muted">Local-first · No API · No telemetry · Fully offline</footer>
@@ -286,6 +287,11 @@ function render() {
   document.getElementById('estNote').textContent = data.estimatedRequestCount > 0
     ? data.estimatedRequestCount + ' request(s) had no exact billing value; their credits are estimated from the model rate table' + (data.includeEstimated ? ' and are included in totals above.' : ' and are excluded from the totals above.')
     : 'All requests in this period carried an exact billing value.';
+
+  const unknown = data.unknownModels || [];
+  document.getElementById('modelNote').textContent = unknown.length
+    ? 'New/unknown model(s) detected (exact credits unaffected; estimates use the default 1× multiplier): ' + unknown.join(', ')
+    : '';
 }
 
 document.getElementById('period').addEventListener('change', (e) => post({ type: 'changePeriod', period: e.target.value }));

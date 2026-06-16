@@ -10,6 +10,7 @@ node_modules/**
 .vscode-test/**
 .github/**
 .temp/**
+scripts/**
 .gitignore
 .vscodeignore
 tsconfig.json
