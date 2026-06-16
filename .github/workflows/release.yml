@@ -1,10 +1,14 @@
 name: Release
 
 # Build and publish a VSIX as a GitHub Release.
-#  - Push a vX.Y.Z tag (preferred), or
-#  - Run manually (workflow_dispatch); the tag is derived from package.json.
+#  - Push to main: releases automatically when package.json version is new
+#    (a version already released is skipped, so non-bump commits don't duplicate).
+#  - Push a vX.Y.Z tag: always releases that tag.
+#  - Run manually (workflow_dispatch): tag is derived from package.json.
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -36,18 +40,29 @@ jobs:
 
       - name: Determine release tag
         id: meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             TAG="${GITHUB_REF_NAME}"
+            PROCEED=true
           else
             VERSION="$(node -p "require('./package.json').version")"
             TAG="v${VERSION}"
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              echo "Release ${TAG} already exists — skipping (bump the version in package.json to release)."
+              PROCEED=false
+            else
+              PROCEED=true
+            fi
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Release tag: ${TAG}"
+          echo "proceed=${PROCEED}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${TAG} (proceed=${PROCEED})"
 
       - name: Package VSIX
         id: package
+        if: steps.meta.outputs.proceed == 'true'
         run: |
           npx --yes @vscode/vsce@latest package
           VSIX_PATH="$(ls -1 *.vsix | head -n 1)"
@@ -55,6 +70,7 @@ jobs:
           echo "Packaged: ${VSIX_PATH}"
 
       - name: Create GitHub Release and upload VSIX
+        if: steps.meta.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
