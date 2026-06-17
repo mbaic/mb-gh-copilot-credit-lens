@@ -51,7 +51,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </header>
 
 <section class="controls">
-  <label class="field" title="Choose the reporting period the whole dashboard is filtered to.">
+  <label class="field" title="Reporting period the whole dashboard is filtered to. Nothing before the billing start date (default 2026-06-01) is ever counted, so 'All time' and the rolling 3–12 month windows start there. 'Current period' is the current calendar month.">
     <span>Period</span>
     <select id="period"></select>
   </label>
@@ -91,7 +91,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
       <span class="legend">credits (requests)</span>
       <div class="spacer"></div>
       <select id="modelLimit" class="mini" title="How many models to list (by credits).">
-        <option value="5">Top 5</option><option value="10">Top 10</option><option value="0">All</option>
+        <option value="5" selected>Top 5</option><option value="10">Top 10</option><option value="0">All</option>
       </select>
     </div>
     <div id="byModel" class="bars"></div>
@@ -128,8 +128,10 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
     <div title="Credits billed exactly (from copilotUsageNanoAiu)."><span class="muted">Exact credits</span><b id="tExact">0</b></div>
     <div title="Estimated credits for the requests that had NO exact value."><span class="muted">+ Estimated (no exact)</span><b id="tEst">0</b></div>
     <div title="Exact + estimated. Equals 'Credits this period' when 'Include estimated credits' is on."><span class="muted">= Total w/ estimates</span><b id="tCombined">0</b></div>
+    <div id="costBox" title="Estimated USD cost = Credits this period × the per-credit rate. Gross — it does not subtract your plan's included monthly allowance."><span class="muted">Est. cost (USD)</span><b id="tCost">—</b></div>
   </div>
   <p id="estNote" class="muted note"></p>
+  <p id="costNote" class="muted note"></p>
   <p id="modelNote" class="muted note"></p>
 </section>
 
@@ -327,9 +329,13 @@ function renderWorkspace(buckets, limit) {
   }
 }
 
+const fmtUsd = (n) => '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function render() {
   renderPeriods();
   document.getElementById('includeEstimated').checked = !!data.includeEstimated;
+  document.getElementById('modelLimit').value = String(modelLimit);
+  document.getElementById('wsLimit').value = String(wsLimit);
 
   const trust = document.getElementById('trust');
   trust.className = 'chip ' + data.trust;
@@ -338,9 +344,12 @@ function render() {
   document.getElementById('lastSync').textContent = data.lastScanAt ? 'Synced ' + new Date(data.lastScanAt).toLocaleString() : 'Not synced yet';
   document.getElementById('kpiPeriod').textContent = fmt(data.kpis.creditsPeriod);
   const exactC = data.totals.exactCredits, fbC = data.totals.fallbackCredits;
-  document.getElementById('kpiPeriodSub').textContent = data.includeEstimated
+  const rate = data.usdPerCredit || 0;
+  const periodCost = data.kpis.creditsPeriod * rate;
+  const breakdown = data.includeEstimated
     ? fmt(exactC) + ' exact + ' + fmt(fbC) + ' estimated'
     : (fbC > 0 ? fmt(exactC) + ' exact (+' + fmt(fbC) + ' if estimates on)' : 'all exact');
+  document.getElementById('kpiPeriodSub').textContent = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(periodCost) : breakdown;
   document.getElementById('kpiToday').textContent = fmt(data.kpis.creditsToday);
   document.getElementById('kpiRequests').textContent = fmtInt(data.kpis.requests);
   document.getElementById('kpiModel').textContent = data.kpis.topModel;
@@ -358,6 +367,12 @@ function render() {
   document.getElementById('tExact').textContent = fmt(t.exactCredits);
   document.getElementById('tEst').textContent = fmt(t.fallbackCredits);
   document.getElementById('tCombined').textContent = fmt(combined);
+
+  document.getElementById('costBox').style.display = rate > 0 ? '' : 'none';
+  document.getElementById('tCost').textContent = rate > 0 ? fmtUsd(periodCost) : '—';
+  document.getElementById('costNote').textContent = rate > 0
+    ? 'Estimated cost = Credits this period (' + fmt(data.kpis.creditsPeriod) + ') × ' + fmtUsd(rate) + '/credit ≈ ' + fmtUsd(periodCost) + '. Based on GitHub usage-based billing (1 AI Credit = $0.01 from 2026-06-01); gross, before your plan’s included monthly allowance. Adjust via the copilotCreditLens.usdPerCredit setting.'
+    : '';
 
   document.getElementById('estNote').textContent = data.estimatedRequestCount > 0
     ? data.estimatedRequestCount + ' request(s) had no exact billing value — their credits are estimated. Exact (' + fmt(t.exactCredits) + ') + estimated (' + fmt(t.fallbackCredits) + ') = ' + fmt(combined) + ', which is “Credits this period” when “Include estimated credits” is on (currently ' + (data.includeEstimated ? 'on' : 'off — period shows exact only') + ').'

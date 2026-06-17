@@ -89,6 +89,24 @@ interface Settings {
   includeCli: boolean;
   additionalRoots: string[];
   backupDirectory: string;
+  billingStartDate: string;
+  usdPerCredit: number;
+}
+
+/** GitHub usage-based billing started 2026-06-01; never count anything before it. */
+const BILLING_FLOOR_MS = new Date(2026, 5, 1).getTime();
+
+/** Parse the configured billing start date (YYYY-MM-DD, local), clamped so it can
+ *  never be earlier than 2026-06-01. Invalid input falls back to the floor. */
+function billingStartMsFrom(dateStr: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateStr || '').trim());
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (!Number.isNaN(d.getTime())) {
+      return Math.max(d.getTime(), BILLING_FLOOR_MS);
+    }
+  }
+  return BILLING_FLOOR_MS;
 }
 
 function readSettings(): Settings {
@@ -104,7 +122,9 @@ function readSettings(): Settings {
     includeDebug: c.get('includeDebugLogs', true),
     includeCli: c.get('includeCliSessions', true),
     additionalRoots: c.get<string[]>('additionalRoots', []),
-    backupDirectory: c.get<string>('backupDirectory', '')
+    backupDirectory: c.get<string>('backupDirectory', ''),
+    billingStartDate: c.get<string>('billingStartDate', '2026-06-01'),
+    usdPerCredit: c.get<number>('usdPerCredit', 0.01)
   };
 }
 
@@ -223,6 +243,7 @@ function handleMessage(msg: WebviewMessage): void {
 }
 
 function computeData() {
+  const settings = readSettings();
   return aggregate(
     ledger.entries,
     period,
@@ -230,7 +251,9 @@ function computeData() {
     ledger.resetMarkers,
     ledger.lastScanAt,
     new Date(),
-    ledger.workspaceNames
+    ledger.workspaceNames,
+    billingStartMsFrom(settings.billingStartDate),
+    settings.usdPerCredit
   );
 }
 
@@ -254,9 +277,20 @@ function updateStatusBar(): void {
     return;
   }
   // Status bar always reflects exact, current-month credits — the billing figure.
-  const data = aggregate(ledger.entries, 'currentMonth', false, ledger.resetMarkers, ledger.lastScanAt);
+  const data = aggregate(
+    ledger.entries,
+    'currentMonth',
+    false,
+    ledger.resetMarkers,
+    ledger.lastScanAt,
+    new Date(),
+    ledger.workspaceNames,
+    billingStartMsFrom(settings.billingStartDate),
+    settings.usdPerCredit
+  );
+  const cost = data.kpis.creditsPeriod * settings.usdPerCredit;
   statusBar.text = `$(graph) ${data.kpis.creditsPeriod} AIU`;
-  statusBar.tooltip = `Copilot credits this period (exact). ${data.kpis.requests} requests. Click to open the dashboard.`;
+  statusBar.tooltip = `Copilot credits this period (exact): ${data.kpis.creditsPeriod} AIU ≈ $${cost.toFixed(2)}. ${data.kpis.requests} requests. Click to open the dashboard.`;
   statusBar.show();
 }
 
@@ -278,7 +312,14 @@ async function resetPeriodCmd(): Promise<void> {
 }
 
 async function exportCsvCmd(): Promise<void> {
-  const scoped = filterByPeriod(ledger.entries, period, ledger.resetMarkers, new Date());
+  const settings = readSettings();
+  const scoped = filterByPeriod(
+    ledger.entries,
+    period,
+    ledger.resetMarkers,
+    new Date(),
+    billingStartMsFrom(settings.billingStartDate)
+  );
   if (scoped.length === 0) {
     vscode.window.showWarningMessage('Copilot Credit Lens: no entries to export for the selected period.');
     return;

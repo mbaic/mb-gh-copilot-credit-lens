@@ -40,6 +40,8 @@ export interface DashboardData {
   /** Models seen in this period that aren't in the rate table (estimates use the
    *  default multiplier). Surfaced so new GitHub models are noticed automatically. */
   unknownModels: string[];
+  /** USD per AI Credit (GitHub usage-based billing: 1 credit = $0.01). Configurable. */
+  usdPerCredit: number;
   periods: { id: PeriodId; label: string }[];
 }
 
@@ -59,8 +61,8 @@ const SOURCE_LABELS: Record<string, string> = {
   cli: 'Copilot CLI'
 };
 
-/** Inclusive lower bound (epoch ms) for a period, or null for "no lower bound". */
-export function periodStart(period: PeriodId, markers: readonly ResetMarker[], now: Date): number | null {
+/** The period's own lower bound before applying the billing-start floor. */
+function naturalStart(period: PeriodId, markers: readonly ResetMarker[], now: Date): number | null {
   switch (period) {
     case 'currentMonth':
       return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -82,14 +84,33 @@ export function periodStart(period: PeriodId, markers: readonly ResetMarker[], n
   }
 }
 
-/** Entries that fall within the selected period, newest source order preserved. */
+/**
+ * Inclusive lower bound (epoch ms) for a period, clamped so nothing earlier than
+ * the billing start date is ever counted. "All time" therefore means "since the
+ * billing start"; rolling windows never reach before it either.
+ */
+export function periodStart(
+  period: PeriodId,
+  markers: readonly ResetMarker[],
+  now: Date,
+  billingStartMs: number | null = null
+): number | null {
+  const natural = naturalStart(period, markers, now);
+  if (billingStartMs === null) {
+    return natural;
+  }
+  return natural === null ? billingStartMs : Math.max(natural, billingStartMs);
+}
+
+/** Entries that fall within the selected period (and on/after the billing start). */
 export function filterByPeriod(
   entries: readonly UsageEntry[],
   period: PeriodId,
   markers: readonly ResetMarker[],
-  now: Date
+  now: Date,
+  billingStartMs: number | null = null
 ): UsageEntry[] {
-  const start = periodStart(period, markers, now);
+  const start = periodStart(period, markers, now, billingStartMs);
   if (start === null) {
     return entries.slice();
   }
@@ -104,9 +125,11 @@ export function aggregate(
   markers: readonly ResetMarker[],
   lastScanAt: string | null,
   now: Date = new Date(),
-  workspaceNames: Record<string, string> = {}
+  workspaceNames: Record<string, string> = {},
+  billingStartMs: number | null = null,
+  usdPerCredit = 0
 ): DashboardData {
-  const scoped = filterByPeriod(entries, period, markers, now);
+  const scoped = filterByPeriod(entries, period, markers, now, billingStartMs);
   const value = (e: UsageEntry): number =>
     e.creditsExact !== null ? e.creditsExact : includeEstimated ? e.creditsEstimated : 0;
 
@@ -181,6 +204,7 @@ export function aggregate(
     },
     estimatedRequestCount,
     unknownModels,
+    usdPerCredit,
     periods: PERIODS
   };
 }

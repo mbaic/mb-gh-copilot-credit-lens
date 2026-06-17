@@ -154,6 +154,20 @@
           "default": "",
           "description": "Optional folder. When set, a full copy of the ledger (copilot-credit-lens-backup.json) is written here automatically after any sync that imports new data. Leave empty to disable auto-backup.",
           "markdownDescription": "Optional folder for **automatic backups**. When set, a full copy of the ledger (`copilot-credit-lens-backup.json`) is written here after any sync that imports new data — a durable copy outside VS Code's global storage. Leave empty to disable. Manual backups are always available via the **Export Data Backup (JSON)** command."
+        },
+        "copilotCreditLens.billingStartDate": {
+          "type": "string",
+          "default": "2026-06-01",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Billing start date (YYYY-MM-DD). No usage before this date is counted in any period. GitHub usage-based billing began 2026-06-01, which is also the earliest allowed value; earlier dates are clamped to it.",
+          "markdownDescription": "Billing start date (`YYYY-MM-DD`). Usage before this date is **never** counted, so *All time* and the rolling 3–12 month windows effectively start here. GitHub usage-based billing began **2026-06-01**, which is the earliest allowed value (earlier dates are clamped to it). *Current period* is still the current calendar month."
+        },
+        "copilotCreditLens.usdPerCredit": {
+          "type": "number",
+          "default": 0.01,
+          "minimum": 0,
+          "description": "USD value of one AI Credit, used for the estimated cost figures. GitHub usage-based billing (from 2026-06-01) prices 1 AI Credit at $0.01. Adjust for currency or plan changes. Cost is gross and does not subtract your plan's included monthly allowance.",
+          "markdownDescription": "USD value of one **AI Credit**, used for the estimated cost shown on the dashboard. GitHub usage-based billing (from 2026-06-01) prices **1 AI Credit = $0.01**. Adjust for currency/plan changes. The estimated cost is **gross** — it does not subtract your plan's included monthly credit allowance. Set to `0` to hide cost figures."
         }
       }
     }

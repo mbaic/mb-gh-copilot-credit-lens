@@ -82,8 +82,23 @@ All under `copilotCreditLens.*`:
 | `includeCliSessions` | `true` | Parse Copilot CLI logs |
 | `additionalRoots` | `[]` | Extra VS Code `User` storage roots (other profiles / Insiders) |
 | `backupDirectory` | `""` | Folder for automatic ledger backups (empty = off) |
+| `billingStartDate` | `"2026-06-01"` | Earliest date counted in any period (min/floor `2026-06-01`) |
+| `usdPerCredit` | `0.01` | USD per AI Credit for cost estimates (`0` hides cost) |
 
 Multiple profiles? Point `additionalRoots` at the other profile's folder that contains `workspaceStorage`.
+
+## Billing period & cost
+
+- **Billing start date** — GitHub's usage-based billing began **2026-06-01**, so
+  nothing earlier is ever counted. *All time* and the rolling 3/6/9/12-month
+  windows therefore start at `billingStartDate` (default and minimum
+  `2026-06-01`); *Current period* is the current calendar month. Set
+  `billingStartDate` to any later date to report from there.
+- **Cost estimate** — credits are AI Credits, billed at **$0.01 each**
+  (`copilotUsageNanoAiu / 1e9 × $0.01`). The dashboard shows an estimated USD
+  cost next to the credits. It is **gross** — it does not subtract your plan's
+  included monthly allowance. Adjust `usdPerCredit` for currency/plan changes, or
+  set it to `0` to hide cost figures.
 
 ## Backup & restore
 

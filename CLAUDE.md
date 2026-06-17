@@ -78,7 +78,9 @@ run `parseFile` → `LedgerStore` → `aggregate` → `toCsv` and assert), then
 
 `autoSync` · `watcherEnabled` · `openOnStartup` · `statusBarEnabled` ·
 `defaultPeriod` · `includeEstimated` · `includeChatSessions` ·
-`includeDebugLogs` · `includeCliSessions` · `additionalRoots` · `backupDirectory`.
+`includeDebugLogs` · `includeCliSessions` · `additionalRoots` · `backupDirectory` ·
+`billingStartDate` (floor 2026-06-01; clamps all periods) · `usdPerCredit`
+(cost = credits × rate; 1 AI Credit = $0.01).
 
 Adding a setting touches two places: `package.json` (`contributes.configuration`)
 and `readSettings()` in `extension.ts` (plus the consumer that uses it).

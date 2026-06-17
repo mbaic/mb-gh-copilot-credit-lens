@@ -31,6 +31,24 @@ Dashboard clarity & controls.
   free models (0× multiplier) add 0 estimated credits, so the toggle may not move
   the total even when estimated requests exist — this is correct.
 
+## [0.1.x] - 2026-06-17
+
+Billing-period floor and USD cost estimates.
+
+### Added
+- **`billingStartDate` setting** (default and minimum `2026-06-01`). No usage
+  before this date is counted, so *All time* and the rolling 3/6/9/12-month
+  windows start at the billing start; *Current period* stays the calendar month.
+  Applied consistently to the dashboard, status bar, and CSV export.
+- **USD cost estimate.** AI Credits are billed at $0.01 each (GitHub usage-based
+  billing); the dashboard shows estimated cost next to credits and in the token
+  totals, and the status bar tooltip includes it. New **`usdPerCredit`** setting
+  (default `0.01`; `0` hides cost). Cost is gross of any included allowance.
+
+### Changed
+- Top 5 / Top 10 / All selects for *By model* and *By workspace* now default to
+  Top 5 explicitly and re-sync their value on every refresh (filtering verified).
+
 ## [0.1.x] - 2026-06-16
 
 Fix: match the real VS Code Copilot agent debug-log schema.
