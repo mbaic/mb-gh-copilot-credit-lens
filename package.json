@@ -67,6 +67,11 @@
         "command": "copilotCreditLens.enableDebugLogging",
         "title": "Enable Copilot Agent Debug Logging",
         "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.rebuildWorkspaceNames",
+        "title": "Rebuild Workspace Names",
+        "category": "Copilot Credit Lens"
       }
     ],
     "configuration": {

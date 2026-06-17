@@ -24,7 +24,8 @@ expected value; nothing here is a commitment to a date.
 
 - **Per-workspace drill-down** page (daily trend and model split for one project).
 - **Most-expensive-sessions** list and a simple model-efficiency view.
-- **Rename / merge workspaces** in the UI when names resolve to a hash.
+- **Manual rename / merge workspaces** in the UI for the few that still resolve to
+  a hash (the **Rebuild Workspace Names** command already auto-resolves the rest).
 - **Streaming tail reads** for very large log files (current reader loads only the
   appended tail; this would cap memory further for pathological files).
 

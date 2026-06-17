@@ -106,6 +106,24 @@ export class LedgerStore {
     return this.ledger.lastScanAt;
   }
 
+  /** hash -> resolved workspace display name. */
+  get workspaceNames(): Record<string, string> {
+    return this.ledger.workspaceMap;
+  }
+
+  /** Distinct workspace keys seen in the ledger (for name rebuilding). */
+  workspaceKeys(): string[] {
+    const keys = new Set<string>(Object.keys(this.ledger.workspaceMap));
+    for (const entry of this.ledger.entries) {
+      keys.add(entry.workspaceKey);
+    }
+    return [...keys];
+  }
+
+  setWorkspaceName(hash: string, name: string): void {
+    this.ledger.workspaceMap[hash] = name;
+  }
+
   /**
    * Append parsed entries, de-duplicating by exact id and collapsing the same
    * logical event across overlapping sources (debug beats chat beats cli).
@@ -127,7 +145,10 @@ export class LedgerStore {
       if (byId.has(entry.id)) {
         continue;
       }
-      this.ledger.workspaceMap[entry.workspaceKey] = entry.workspaceName;
+      // Keep a resolved name; never clobber a good one with a hash fallback.
+      if (entry.workspaceName && entry.workspaceName !== entry.workspaceKey) {
+        this.ledger.workspaceMap[entry.workspaceKey] = entry.workspaceName;
+      }
 
       const key = logicalKey(entry);
       const existingIndex = logicalIndex.get(key);

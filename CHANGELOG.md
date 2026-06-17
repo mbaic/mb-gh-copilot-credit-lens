@@ -3,6 +3,29 @@
 All notable changes to **GitHub Copilot Credit Lens** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.x] - 2026-06-17
+
+Dashboard clarity & controls.
+
+### Added
+- **Top 5 / Top 10 / All** filters for the **By model** and **By workspace**
+  lists (default Top 5).
+- **Credits per day** now shows per-bar value labels (when the period is short)
+  and a hover tooltip with the exact date and credits.
+- **Rebuild Workspace Names** command + smarter resolution (handles single-folder,
+  multi-root `.code-workspace`, and older layouts) so workspaces show readable
+  names instead of a storage hash. Unresolvable ones are shortened and labelled.
+- **Tooltips** across the dashboard — KPIs, charts, buttons, the trust chip and
+  the period/estimate controls all explain themselves on hover.
+
+### Changed
+- **By model / By source** rows now read `credits (requests)` with a legend, and
+  each row has a full hover breakdown (credits, requests, tokens).
+- **By source** labels clarified: `Agent (debug logs)`, `Chat sessions`, `Copilot CLI`.
+- **Token totals** reworked to reconcile with the KPI: shows `Exact credits`,
+  `+ Estimated (no exact)`, and `= Total w/ estimates`, where
+  exact + estimated equals **Credits this period** when estimates are included.
+
 ## [0.1.x] - 2026-06-16
 
 Fix: match the real VS Code Copilot agent debug-log schema.

@@ -54,18 +54,54 @@ async function isFile(p: string): Promise<boolean> {
   }
 }
 
-/** Resolve a readable workspace name from a workspaceStorage/{hash}/workspace.json. */
+/** Resolve a readable workspace name from a workspaceStorage/{hash}/workspace.json.
+ *  Handles single-folder (`folder`), multi-root (`workspace` -> a .code-workspace
+ *  file) and the older `configuration.path` shape. */
 async function resolveWorkspaceName(workspaceDir: string, fallback: string): Promise<string> {
   try {
     const raw = await fsp.readFile(path.join(workspaceDir, 'workspace.json'), 'utf8');
-    const folder: unknown = JSON.parse(raw).folder;
-    if (typeof folder === 'string' && folder.length > 0) {
-      return lastSegment(decodeURIComponent(folder));
+    const json = JSON.parse(raw) as Record<string, unknown>;
+    const config = json.configuration as Record<string, unknown> | undefined;
+    const candidate =
+      pickStringField(json.folder) ||
+      pickStringField(json.workspace) ||
+      (config ? pickStringField(config.path) || pickStringField(config.fsPath) : '');
+    if (candidate) {
+      const name = lastSegment(decodeURIComponentSafe(candidate)).replace(/\.code-workspace$/i, '');
+      if (name) {
+        return name;
+      }
     }
   } catch {
     /* fall through to fallback */
   }
   return fallback;
+}
+
+function pickStringField(value: unknown): string {
+  return typeof value === 'string' && value.length > 0 ? value : '';
+}
+
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Resolve the display name for a single workspace hash by checking each root.
+ *  Used by the "Rebuild Workspace Names" command. Returns undefined if no
+ *  workspace.json can be read for that hash. */
+export async function resolveWorkspaceNameForHash(roots: string[], hash: string): Promise<string | undefined> {
+  for (const root of roots) {
+    const dir = path.join(root, 'workspaceStorage', hash);
+    const name = await resolveWorkspaceName(dir, '');
+    if (name) {
+      return name;
+    }
+  }
+  return undefined;
 }
 
 /** Resolve the working directory label for a CLI session from workspace.yaml. */

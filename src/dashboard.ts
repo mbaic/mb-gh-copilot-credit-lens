@@ -1,6 +1,6 @@
 // The dashboard webview: an HTML shell plus a self-contained inline script that
 // renders the data pushed from the extension. No external scripts, no CDN, no
-// charting library — bars are hand-built SVG/CSS. All dynamic text is written
+// charting library — bars are hand-built HTML/CSS. All dynamic text is written
 // with textContent (never innerHTML), so untrusted log-derived strings cannot
 // inject markup. Theme surfaces use VS Code theme variables (light/dark aware);
 // the brand accent is Business Central green.
@@ -36,51 +36,82 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 <style>${STYLES}</style>
 </head>
 <body>
+<div id="tip" class="tip"></div>
+
 <header class="topbar">
   <div class="brand">
     <span class="dot"></span>
     <h1>GitHub Copilot Credit Lens</h1>
   </div>
   <div class="topbar-right">
-    <span id="trust" class="chip">—</span>
+    <span id="trust" class="chip" title="Data trust: Exact = every request had an exact billing value; Mixed = some were estimated; Estimated = all estimated.">—</span>
     <span id="lastSync" class="muted"></span>
-    <button id="syncBtn" class="btn">Sync now</button>
+    <button id="syncBtn" class="btn" title="Re-scan your local Copilot logs for new usage and refresh the data.">Sync now</button>
   </div>
 </header>
 
 <section class="controls">
-  <label class="field">
+  <label class="field" title="Choose the reporting period the whole dashboard is filtered to.">
     <span>Period</span>
     <select id="period"></select>
   </label>
-  <label class="field check">
+  <label class="field check" title="When on, requests that had no exact billing value contribute an estimated credit (from the model rate table) to the totals. When off, only exact credits are counted.">
     <input type="checkbox" id="includeEstimated" />
     <span>Include estimated credits</span>
   </label>
   <div class="spacer"></div>
-  <button id="resetBtn" class="btn ghost">Reset period</button>
-  <button id="exportBtn" class="btn ghost">Export CSV</button>
+  <button id="resetBtn" class="btn ghost" title="Add a reset marker at 'now'. Pick the 'Since last reset' period to view from here. Does not delete any data.">Reset period</button>
+  <button id="exportBtn" class="btn ghost" title="Export the selected period's entries to a CSV file.">Export CSV</button>
 </section>
 
 <section class="kpis">
-  <div class="kpi"><div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div></div>
-  <div class="kpi"><div class="kpi-label">Credits today</div><div id="kpiToday" class="kpi-value">0</div></div>
-  <div class="kpi"><div class="kpi-label">Requests</div><div id="kpiRequests" class="kpi-value">0</div></div>
-  <div class="kpi"><div class="kpi-label">Top model</div><div id="kpiModel" class="kpi-value small">—</div></div>
+  <div class="kpi" title="Total credits (AIU) attributed to the selected period. Includes estimates only when 'Include estimated credits' is on.">
+    <div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div></div>
+  <div class="kpi" title="Credits used so far today (your local date).">
+    <div class="kpi-label">Credits today</div><div id="kpiToday" class="kpi-value">0</div></div>
+  <div class="kpi" title="Number of model requests counted in the selected period.">
+    <div class="kpi-label">Requests</div><div id="kpiRequests" class="kpi-value">0</div></div>
+  <div class="kpi" title="The model with the most credits in the selected period.">
+    <div class="kpi-label">Top model</div><div id="kpiModel" class="kpi-value small">—</div></div>
 </section>
 
 <section class="card">
-  <h2>Credits per day</h2>
+  <div class="card-head">
+    <h2 title="Credits per calendar day in the selected period. Bar height = credits that day.">Credits per day</h2>
+    <span class="legend">hover a bar for date &amp; exact credits</span>
+  </div>
   <div id="daily" class="chart"></div>
 </section>
 
 <div class="grid-2">
-  <section class="card"><h2>By model</h2><div id="byModel" class="bars"></div></section>
-  <section class="card"><h2>By source</h2><div id="bySource" class="bars"></div></section>
+  <section class="card">
+    <div class="card-head">
+      <h2 title="Credits and request count per model. Bar length is proportional to credits.">By model</h2>
+      <span class="legend">credits (requests)</span>
+      <div class="spacer"></div>
+      <select id="modelLimit" class="mini" title="How many models to list (by credits).">
+        <option value="5">Top 5</option><option value="10">Top 10</option><option value="0">All</option>
+      </select>
+    </div>
+    <div id="byModel" class="bars"></div>
+  </section>
+  <section class="card">
+    <div class="card-head">
+      <h2 title="Where usage came from: Agent (debug logs) = VS Code agent/chat sessions with file logging; Chat sessions; Copilot CLI.">By source</h2>
+      <span class="legend">credits (requests)</span>
+    </div>
+    <div id="bySource" class="bars"></div>
+  </section>
 </div>
 
 <section class="card">
-  <h2>By workspace</h2>
+  <div class="card-head">
+    <h2 title="Credits, requests and tokens per VS Code workspace/project. Use 'Rebuild Workspace Names' if any show as a hash.">By workspace</h2>
+    <div class="spacer"></div>
+    <select id="wsLimit" class="mini" title="How many workspaces to list (by credits).">
+      <option value="5">Top 5</option><option value="10">Top 10</option><option value="0">All</option>
+    </select>
+  </div>
   <table class="table">
     <thead><tr><th>Workspace</th><th class="num">Credits</th><th class="num">Requests</th><th class="num">Tokens</th></tr></thead>
     <tbody id="byWorkspace"></tbody>
@@ -88,13 +119,14 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </section>
 
 <section class="card">
-  <h2>Token totals (period)</h2>
+  <h2 title="Token and credit totals for the selected period.">Token totals (period)</h2>
   <div class="totals">
-    <div><span class="muted">Input</span><b id="tIn">0</b></div>
-    <div><span class="muted">Output</span><b id="tOut">0</b></div>
-    <div><span class="muted">Cached</span><b id="tCached">0</b></div>
-    <div><span class="muted">Exact credits</span><b id="tExact">0</b></div>
-    <div><span class="muted">Estimated credits</span><b id="tEst">0</b></div>
+    <div title="Sum of input (prompt) tokens."><span class="muted">Input tokens</span><b id="tIn">0</b></div>
+    <div title="Sum of output (completion) tokens."><span class="muted">Output tokens</span><b id="tOut">0</b></div>
+    <div title="Sum of cached tokens (read from cache)."><span class="muted">Cached tokens</span><b id="tCached">0</b></div>
+    <div title="Credits billed exactly (from copilotUsageNanoAiu)."><span class="muted">Exact credits</span><b id="tExact">0</b></div>
+    <div title="Estimated credits for the requests that had NO exact value."><span class="muted">+ Estimated (no exact)</span><b id="tEst">0</b></div>
+    <div title="Exact + estimated. Equals 'Credits this period' when 'Include estimated credits' is on."><span class="muted">= Total w/ estimates</span><b id="tCombined">0</b></div>
   </div>
   <p id="estNote" class="muted note"></p>
   <p id="modelNote" class="muted note"></p>
@@ -105,6 +137,8 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 let data = ${dataJson};
+let modelLimit = 5;
+let wsLimit = 5;
 ${CLIENT_SCRIPT}
 </script>
 </body>
@@ -120,7 +154,6 @@ const STYLES = `
   --muted: var(--vscode-descriptionForeground, #8a8a8a);
   --surface: var(--vscode-editorWidget-background, rgba(127,127,127,0.06));
   --border: var(--vscode-panel-border, rgba(127,127,127,0.25));
-  --chart: ['#107C41'];
 }
 * { box-sizing: border-box; }
 body {
@@ -129,13 +162,13 @@ body {
   font-size: 13px; color: var(--fg); background: var(--bg);
 }
 h1 { font-size: 16px; margin: 0; font-weight: 600; }
-h2 { font-size: 12px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .muted { color: var(--muted); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .dot { width: 12px; height: 12px; border-radius: 3px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
-.chip { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); }
+.chip { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); cursor: help; }
 .chip.exact { background: rgba(16,124,65,.15); border-color: var(--accent); color: var(--accent-2); }
 .chip.mixed { background: rgba(196,154,16,.15); border-color: #c49a10; }
 .chip.estimated { background: rgba(196,109,16,.15); border-color: #c46d10; }
@@ -147,18 +180,27 @@ h2 { font-size: 12px; margin: 0 0 10px; text-transform: uppercase; letter-spacin
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
 .field.check { flex-direction: row; align-items: center; gap: 6px; color: var(--fg); font-size: 13px; }
 select { font: inherit; padding: 4px 8px; border-radius: 5px; background: var(--surface); color: var(--fg); border: 1px solid var(--border); }
+select.mini { padding: 2px 6px; font-size: 11px; }
 .spacer { flex: 1; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; cursor: help; }
 .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .kpi-value { font-size: 24px; font-weight: 600; }
 .kpi-value.small { font-size: 15px; word-break: break-word; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.card-head h2 { cursor: help; }
+.legend { font-size: 10px; color: var(--muted); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .chart { width: 100%; }
-.chart svg { width: 100%; height: 180px; display: block; }
+.daychart { display: flex; align-items: flex-end; gap: 3px; height: 168px; }
+.day { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; cursor: default; }
+.day .dayval { font-size: 9px; color: var(--muted); margin-bottom: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.daybar { width: 78%; min-height: 2px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-radius: 3px 3px 0 0; transition: filter .1s; }
+.day:hover .daybar { filter: brightness(1.3); }
+.dayaxis { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 6px; }
 .bars { display: flex; flex-direction: column; gap: 8px; }
-.bar-row { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 10px; font-size: 12px; }
+.bar-row { display: grid; grid-template-columns: 130px 1fr auto; align-items: center; gap: 10px; font-size: 12px; cursor: default; }
 .bar-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { background: rgba(127,127,127,.18); border-radius: 4px; height: 14px; overflow: hidden; }
 .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 4px; }
@@ -166,23 +208,32 @@ select { font: inherit; padding: 4px 8px; border-radius: 5px; background: var(--
 .table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .table th.num, .table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table th { color: var(--muted); font-weight: 600; }
 .totals { display: flex; gap: 22px; flex-wrap: wrap; }
-.totals div { display: flex; flex-direction: column; gap: 2px; }
+.totals div { display: flex; flex-direction: column; gap: 2px; cursor: help; }
 .totals b { font-size: 16px; font-variant-numeric: tabular-nums; }
 .note { margin: 12px 0 0; font-size: 11px; }
 .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
 .foot { text-align: center; font-size: 11px; margin-top: 18px; }
+.tip { position: fixed; pointer-events: none; display: none; z-index: 50; max-width: 280px;
+  background: var(--vscode-editorHoverWidget-background, #252526);
+  color: var(--vscode-editorHoverWidget-foreground, var(--fg));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--border));
+  border-radius: 5px; padding: 5px 8px; font-size: 11px; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
 @media (max-width: 720px) { .kpis { grid-template-columns: repeat(2,1fr); } .grid-2 { grid-template-columns: 1fr; } }
 `;
 
 const CLIENT_SCRIPT = `
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const fmt = (n) => (Math.round(n * 10000) / 10000).toLocaleString();
 const fmtInt = (n) => Math.round(n).toLocaleString();
-
+function fmtShort(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : (Math.round(n * 100) / 100).toLocaleString(); }
 function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
-
 function post(msg) { vscode.postMessage(msg); }
+function shortWs(s) { return /^[0-9a-f]{16,}$/i.test(s) ? s.slice(0, 8) + '…' : s; }
+
+const tipEl = () => document.getElementById('tip');
+function showTip(e, text) { const t = tipEl(); t.textContent = text; t.style.display = 'block'; t.style.left = (e.clientX + 12) + 'px'; t.style.top = (e.clientY + 14) + 'px'; }
+function hideTip() { tipEl().style.display = 'none'; }
 
 function renderPeriods() {
   const sel = document.getElementById('period');
@@ -195,21 +246,28 @@ function renderPeriods() {
   }
 }
 
-function renderBars(containerId, buckets) {
+function renderBars(containerId, buckets, limit) {
   const el = document.getElementById(containerId);
   clear(el);
   if (!buckets.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'No data'; el.appendChild(e); return; }
-  const max = Math.max(...buckets.map((b) => b.credits), 0.0001);
-  for (const b of buckets.slice(0, 12)) {
+  const shown = limit > 0 ? buckets.slice(0, limit) : buckets;
+  const max = Math.max(...shown.map((b) => b.credits), 0.0001);
+  for (const b of shown) {
     const row = document.createElement('div'); row.className = 'bar-row';
-    const label = document.createElement('span'); label.className = 'bar-label'; label.textContent = b.label; label.title = b.label;
+    row.title = b.label + ' — ' + fmt(b.credits) + ' credits, ' + fmtInt(b.requests) + ' requests, ' + fmtInt(b.tokens) + ' tokens';
+    const label = document.createElement('span'); label.className = 'bar-label'; label.textContent = b.label;
     const track = document.createElement('div'); track.className = 'bar-track';
     const fill = document.createElement('div'); fill.className = 'bar-fill';
     fill.style.width = Math.max(2, (b.credits / max) * 100) + '%';
     track.appendChild(fill);
-    const val = document.createElement('span'); val.className = 'bar-value'; val.textContent = fmt(b.credits) + ' (' + b.requests + ')';
+    const val = document.createElement('span'); val.className = 'bar-value'; val.textContent = fmt(b.credits) + ' (' + fmtInt(b.requests) + ')';
     row.appendChild(label); row.appendChild(track); row.appendChild(val);
     el.appendChild(row);
+  }
+  if (limit > 0 && buckets.length > limit) {
+    const more = document.createElement('div'); more.className = 'empty';
+    more.textContent = '+' + (buckets.length - limit) + ' more (choose “All”)';
+    el.appendChild(more);
   }
 }
 
@@ -217,46 +275,53 @@ function renderDaily(daily) {
   const el = document.getElementById('daily');
   clear(el);
   if (!daily.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'No activity in this period'; el.appendChild(e); return; }
-  const W = 100, H = 100, pad = 2;
   const max = Math.max(...daily.map((d) => d.credits), 0.0001);
-  const n = daily.length;
-  const bw = (W - pad * 2) / n;
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-  svg.setAttribute('preserveAspectRatio', 'none');
-  daily.forEach((d, i) => {
-    const h = (d.credits / max) * (H - pad * 2);
-    const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', (pad + i * bw + bw * 0.12).toFixed(2));
-    rect.setAttribute('y', (H - pad - h).toFixed(2));
-    rect.setAttribute('width', (bw * 0.76).toFixed(2));
-    rect.setAttribute('height', Math.max(0.4, h).toFixed(2));
-    rect.setAttribute('fill', '#107C41');
-    rect.setAttribute('rx', '0.6');
-    const title = document.createElementNS(SVG_NS, 'title');
-    title.textContent = d.date + ': ' + fmt(d.credits);
-    rect.appendChild(title);
-    svg.appendChild(rect);
-  });
-  el.appendChild(svg);
+  const showVals = daily.length <= 16;
+  const chart = document.createElement('div'); chart.className = 'daychart';
+  for (const d of daily) {
+    const col = document.createElement('div'); col.className = 'day';
+    if (showVals && d.credits > 0) {
+      const v = document.createElement('div'); v.className = 'dayval'; v.textContent = fmtShort(d.credits); col.appendChild(v);
+    }
+    const bar = document.createElement('div'); bar.className = 'daybar';
+    bar.style.height = Math.max(2, (d.credits / max) * 100) + '%';
+    col.appendChild(bar);
+    const label = d.date + ' — ' + fmt(d.credits) + ' credits';
+    col.addEventListener('mousemove', (e) => showTip(e, label));
+    col.addEventListener('mouseleave', hideTip);
+    chart.appendChild(col);
+  }
+  el.appendChild(chart);
+  const axis = document.createElement('div'); axis.className = 'dayaxis';
+  const a = document.createElement('span'); a.textContent = daily[0].date;
+  const b = document.createElement('span'); b.textContent = daily[daily.length - 1].date;
+  axis.appendChild(a); axis.appendChild(b);
+  el.appendChild(axis);
 }
 
-function renderWorkspace(buckets) {
+function renderWorkspace(buckets, limit) {
   const body = document.getElementById('byWorkspace');
   clear(body);
   if (!buckets.length) {
     const tr = document.createElement('tr'); const td = document.createElement('td');
     td.colSpan = 4; td.className = 'empty'; td.textContent = 'No data'; tr.appendChild(td); body.appendChild(tr); return;
   }
-  for (const b of buckets) {
+  const shown = limit > 0 ? buckets.slice(0, limit) : buckets;
+  for (const b of shown) {
     const tr = document.createElement('tr');
-    const cells = [b.label, fmt(b.credits), fmtInt(b.requests), fmtInt(b.tokens)];
-    cells.forEach((text, idx) => {
-      const td = document.createElement('td');
-      if (idx > 0) td.className = 'num';
-      td.textContent = text; tr.appendChild(td);
+    const name = document.createElement('td');
+    name.textContent = shortWs(b.label);
+    if (shortWs(b.label) !== b.label) { name.title = 'Unnamed workspace (no metadata on disk): ' + b.label; }
+    tr.appendChild(name);
+    [fmt(b.credits), fmtInt(b.requests), fmtInt(b.tokens)].forEach((text) => {
+      const td = document.createElement('td'); td.className = 'num'; td.textContent = text; tr.appendChild(td);
     });
     body.appendChild(tr);
+  }
+  if (limit > 0 && buckets.length > limit) {
+    const tr = document.createElement('tr'); const td = document.createElement('td');
+    td.colSpan = 4; td.className = 'empty'; td.textContent = '+' + (buckets.length - limit) + ' more (choose “All”)';
+    tr.appendChild(td); body.appendChild(tr);
   }
 }
 
@@ -275,17 +340,21 @@ function render() {
   document.getElementById('kpiModel').textContent = data.kpis.topModel;
 
   renderDaily(data.daily);
-  renderBars('byModel', data.byModel);
-  renderBars('bySource', data.bySource);
-  renderWorkspace(data.byWorkspace);
+  renderBars('byModel', data.byModel, modelLimit);
+  renderBars('bySource', data.bySource, 0);
+  renderWorkspace(data.byWorkspace, wsLimit);
 
-  document.getElementById('tIn').textContent = fmtInt(data.totals.inputTokens);
-  document.getElementById('tOut').textContent = fmtInt(data.totals.outputTokens);
-  document.getElementById('tCached').textContent = fmtInt(data.totals.cachedTokens);
-  document.getElementById('tExact').textContent = fmt(data.totals.exactCredits);
-  document.getElementById('tEst').textContent = fmt(data.totals.estimatedCredits);
+  const t = data.totals;
+  const combined = Math.round((t.exactCredits + t.fallbackCredits) * 10000) / 10000;
+  document.getElementById('tIn').textContent = fmtInt(t.inputTokens);
+  document.getElementById('tOut').textContent = fmtInt(t.outputTokens);
+  document.getElementById('tCached').textContent = fmtInt(t.cachedTokens);
+  document.getElementById('tExact').textContent = fmt(t.exactCredits);
+  document.getElementById('tEst').textContent = fmt(t.fallbackCredits);
+  document.getElementById('tCombined').textContent = fmt(combined);
+
   document.getElementById('estNote').textContent = data.estimatedRequestCount > 0
-    ? data.estimatedRequestCount + ' request(s) had no exact billing value; their credits are estimated from the model rate table' + (data.includeEstimated ? ' and are included in totals above.' : ' and are excluded from the totals above.')
+    ? data.estimatedRequestCount + ' request(s) had no exact billing value — their credits are estimated. Exact (' + fmt(t.exactCredits) + ') + estimated (' + fmt(t.fallbackCredits) + ') = ' + fmt(combined) + ', which is “Credits this period” when “Include estimated credits” is on (currently ' + (data.includeEstimated ? 'on' : 'off — period shows exact only') + ').'
     : 'All requests in this period carried an exact billing value.';
 
   const unknown = data.unknownModels || [];
@@ -299,6 +368,8 @@ document.getElementById('includeEstimated').addEventListener('change', (e) => po
 document.getElementById('syncBtn').addEventListener('click', () => post({ type: 'sync' }));
 document.getElementById('resetBtn').addEventListener('click', () => post({ type: 'reset' }));
 document.getElementById('exportBtn').addEventListener('click', () => post({ type: 'export' }));
+document.getElementById('modelLimit').addEventListener('change', (e) => { modelLimit = parseInt(e.target.value, 10); renderBars('byModel', data.byModel, modelLimit); });
+document.getElementById('wsLimit').addEventListener('change', (e) => { wsLimit = parseInt(e.target.value, 10); renderWorkspace(data.byWorkspace, wsLimit); });
 
 window.addEventListener('message', (event) => {
   const msg = event.data;

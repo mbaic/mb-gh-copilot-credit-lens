@@ -11,7 +11,7 @@ import { runScan, ScanConfig } from './scanner';
 import { aggregate, filterByPeriod, PERIODS } from './aggregate';
 import { buildDashboardHtml, WebviewMessage } from './dashboard';
 import { toCsv } from './csv';
-import { cliSessionRoot, defaultUserRoots } from './paths';
+import { cliSessionRoot, defaultUserRoots, resolveWorkspaceNameForHash } from './paths';
 import { PeriodId } from './types';
 
 const VIEW_TYPE = 'copilotCreditLens.dashboard';
@@ -51,7 +51,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('copilotCreditLens.exportCsv', exportCsvCmd),
     vscode.commands.registerCommand('copilotCreditLens.exportBackup', exportBackupCmd),
     vscode.commands.registerCommand('copilotCreditLens.clearLedger', clearLedgerCmd),
-    vscode.commands.registerCommand('copilotCreditLens.enableDebugLogging', enableDebugLoggingCmd)
+    vscode.commands.registerCommand('copilotCreditLens.enableDebugLogging', enableDebugLoggingCmd),
+    vscode.commands.registerCommand('copilotCreditLens.rebuildWorkspaceNames', rebuildWorkspaceNamesCmd)
   );
 
   if (settings.watcherEnabled) {
@@ -222,7 +223,15 @@ function handleMessage(msg: WebviewMessage): void {
 }
 
 function computeData() {
-  return aggregate(ledger.entries, period, includeEstimated, ledger.resetMarkers, ledger.lastScanAt);
+  return aggregate(
+    ledger.entries,
+    period,
+    includeEstimated,
+    ledger.resetMarkers,
+    ledger.lastScanAt,
+    new Date(),
+    ledger.workspaceNames
+  );
 }
 
 function refresh(): void {
@@ -346,6 +355,27 @@ async function clearLedgerCmd(): Promise<void> {
   await ledger.clear();
   refresh();
   vscode.window.showInformationMessage('Copilot Credit Lens: all data cleared.');
+}
+
+async function rebuildWorkspaceNamesCmd(): Promise<void> {
+  const settings = readSettings();
+  const roots = [...defaultUserRoots(), ...settings.additionalRoots];
+  let resolved = 0;
+  for (const hash of ledger.workspaceKeys()) {
+    if (hash === 'cli') {
+      continue;
+    }
+    const name = await resolveWorkspaceNameForHash(roots, hash);
+    if (name) {
+      ledger.setWorkspaceName(hash, name);
+      resolved++;
+    }
+  }
+  await ledger.save();
+  refresh();
+  vscode.window.showInformationMessage(
+    `Copilot Credit Lens: resolved ${resolved} workspace name(s). Names still shown as a hash have no readable workspace metadata on disk.`
+  );
 }
 
 async function enableDebugLoggingCmd(): Promise<void> {

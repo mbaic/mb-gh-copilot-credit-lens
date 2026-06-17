@@ -29,10 +29,12 @@ Cloud (server-side) coding-agent runs do not produce local billing logs and are 
 ## Dashboard
 
 - **KPI strip:** credits this period, credits today, request count, top model.
-- **Charts:** credits per day (inline SVG), plus by-model and by-source bars — all hand-built, no charting library.
-- **Workspace table** and **token totals** for the selected period.
+- **Charts:** credits per day (with value labels + hover tooltips), plus by-model and by-source bars labelled `credits (requests)` — all hand-built, no charting library.
+- **Workspace table** with readable project names, and **token totals** that reconcile with the headline (`Exact + Estimated = Credits this period`).
+- **Top 5 / Top 10 / All** filters on the by-model and by-workspace lists.
 - **Period selector:** current month · rolling 3 / 6 / 9 / 12 months · since last reset · all time.
 - **Exact vs estimated** toggle and an `Exact / Mixed / Estimated` trust chip.
+- **Tooltips** on every chart, control and stat explaining what it shows.
 - A compact **status-bar** item (`⚡ AIU this period`) opens the dashboard on click.
 
 ## Prerequisites
@@ -59,6 +61,7 @@ Open the Command Palette (`Ctrl/Cmd+Shift+P`) → **Copilot Credit Lens:**
 | Export Data Backup (JSON) | Save a full, restorable copy of the ledger |
 | Clear All Data | Wipe the ledger (with confirmation) |
 | Enable Copilot Agent Debug Logging | Turn on precise agent credit logging |
+| Rebuild Workspace Names | Re-resolve workspace names shown as a hash |
 
 On startup the extension scans existing logs (backfill) and, while open, ingests new usage live via a file watcher.
 

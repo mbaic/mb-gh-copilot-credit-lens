@@ -29,7 +29,9 @@ export interface DashboardData {
   byWorkspace: Bucket[];
   totals: {
     exactCredits: number;
-    estimatedCredits: number;
+    /** Estimated credits for the requests that had NO exact value. Adds to
+     *  exactCredits to reconcile with creditsPeriod when estimates are included. */
+    fallbackCredits: number;
     inputTokens: number;
     outputTokens: number;
     cachedTokens: number;
@@ -52,9 +54,9 @@ export const PERIODS: { id: PeriodId; label: string }[] = [
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
-  chat: 'Chat',
-  debug: 'Agent (debug)',
-  cli: 'CLI'
+  chat: 'Chat sessions',
+  debug: 'Agent (debug logs)',
+  cli: 'Copilot CLI'
 };
 
 /** Inclusive lower bound (epoch ms) for a period, or null for "no lower bound". */
@@ -101,7 +103,8 @@ export function aggregate(
   includeEstimated: boolean,
   markers: readonly ResetMarker[],
   lastScanAt: string | null,
-  now: Date = new Date()
+  now: Date = new Date(),
+  workspaceNames: Record<string, string> = {}
 ): DashboardData {
   const scoped = filterByPeriod(entries, period, markers, now);
   const value = (e: UsageEntry): number =>
@@ -111,7 +114,7 @@ export function aggregate(
   const source = new Map<string, Bucket>();
   const workspace = new Map<string, Bucket>();
   const dayCredits = new Map<string, number>();
-  const totals = { exactCredits: 0, estimatedCredits: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  const totals = { exactCredits: 0, fallbackCredits: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
 
   const todayKey = dateKey(now);
   let creditsPeriod = 0;
@@ -130,15 +133,15 @@ export function aggregate(
 
     addTo(model, e.model || 'unknown', credits, e);
     addTo(source, SOURCE_LABELS[e.source] ?? e.source, credits, e);
-    addTo(workspace, e.workspaceName || e.workspaceKey, credits, e);
+    addTo(workspace, resolveWorkspaceLabel(e, workspaceNames), credits, e);
 
     if (e.creditsExact !== null) {
       totals.exactCredits += e.creditsExact;
       exactCount++;
     } else {
       estimatedRequestCount++;
+      totals.fallbackCredits += e.creditsEstimated;
     }
-    totals.estimatedCredits += e.creditsEstimated;
     totals.inputTokens += e.inputTokens;
     totals.outputTokens += e.outputTokens;
     totals.cachedTokens += e.cachedTokens;
@@ -171,7 +174,7 @@ export function aggregate(
     byWorkspace: sortBuckets(workspace),
     totals: {
       exactCredits: round4(totals.exactCredits),
-      estimatedCredits: round4(totals.estimatedCredits),
+      fallbackCredits: round4(totals.fallbackCredits),
       inputTokens: totals.inputTokens,
       outputTokens: totals.outputTokens,
       cachedTokens: totals.cachedTokens
@@ -183,6 +186,19 @@ export function aggregate(
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Best human-readable workspace label: a rebuilt name wins, then the name
+ *  resolved at parse time, then the raw key (a hash) as a last resort. */
+function resolveWorkspaceLabel(e: UsageEntry, names: Record<string, string>): string {
+  const mapped = names[e.workspaceKey];
+  if (mapped && mapped !== e.workspaceKey) {
+    return mapped;
+  }
+  if (e.workspaceName && e.workspaceName !== e.workspaceKey) {
+    return e.workspaceName;
+  }
+  return e.workspaceKey;
+}
 
 function addTo(map: Map<string, Bucket>, label: string, credits: number, e: UsageEntry): void {
   const bucket = map.get(label) ?? { label, credits: 0, requests: 0, tokens: 0 };

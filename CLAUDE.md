@@ -33,8 +33,11 @@ Small, single-purpose modules with a deliberate split (UI vs. logic vs. I/O):
   `DashboardData` (KPIs, daily series, by-model/source/workspace, trust chip).
 - **`src/csv.ts`** — `toCsv(entries)`, RFC-4180-style escaping.
 - **`src/dashboard.ts`** — the webview: HTML shell + inline CSS + a nonce'd inline
-  script that renders hand-built SVG/CSS charts. All dynamic text uses
-  `textContent` (never `innerHTML`). Defines the typed extension↔webview messages.
+  script that renders hand-built HTML/CSS charts (daily bars with value labels +
+  hover tooltip, by-model/source `credits (requests)` bars, workspace table),
+  client-side Top 5/10/All filters, a reconciling credits footer, and tooltips
+  throughout. All dynamic text uses `textContent` (never `innerHTML`). Defines the
+  typed extension↔webview messages.
 - **`src/extension.ts`** — VS Code integration only: activation, settings,
   commands, status bar, file watcher, and the webview panel lifecycle.
 
