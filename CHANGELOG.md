@@ -25,6 +25,11 @@ Dashboard clarity & controls.
 - **Token totals** reworked to reconcile with the KPI: shows `Exact credits`,
   `+ Estimated (no exact)`, and `= Total w/ estimates`, where
   exact + estimated equals **Credits this period** when estimates are included.
+- **Credits this period** now shows a breakdown line under the number
+  (`X exact + Y estimated`, or `X exact (+Y if estimates on)`), making the
+  effect of the **Include estimated credits** toggle explicit. Note: requests on
+  free models (0× multiplier) add 0 estimated credits, so the toggle may not move
+  the total even when estimated requests exist — this is correct.
 
 ## [0.1.x] - 2026-06-16
 

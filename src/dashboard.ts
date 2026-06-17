@@ -65,8 +65,9 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </section>
 
 <section class="kpis">
-  <div class="kpi" title="Total credits (AIU) attributed to the selected period. Includes estimates only when 'Include estimated credits' is on.">
-    <div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div></div>
+  <div class="kpi" title="Total credits (AIU) for the selected period. Equals exact credits, plus estimated credits for requests without an exact value when 'Include estimated credits' is on.">
+    <div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div>
+    <div id="kpiPeriodSub" class="kpi-sub"></div></div>
   <div class="kpi" title="Credits used so far today (your local date).">
     <div class="kpi-label">Credits today</div><div id="kpiToday" class="kpi-value">0</div></div>
   <div class="kpi" title="Number of model requests counted in the selected period.">
@@ -187,6 +188,7 @@ select.mini { padding: 2px 6px; font-size: 11px; }
 .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .kpi-value { font-size: 24px; font-weight: 600; }
 .kpi-value.small { font-size: 15px; word-break: break-word; }
+.kpi-sub { font-size: 10px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
 .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .card-head h2 { cursor: help; }
@@ -335,6 +337,10 @@ function render() {
 
   document.getElementById('lastSync').textContent = data.lastScanAt ? 'Synced ' + new Date(data.lastScanAt).toLocaleString() : 'Not synced yet';
   document.getElementById('kpiPeriod').textContent = fmt(data.kpis.creditsPeriod);
+  const exactC = data.totals.exactCredits, fbC = data.totals.fallbackCredits;
+  document.getElementById('kpiPeriodSub').textContent = data.includeEstimated
+    ? fmt(exactC) + ' exact + ' + fmt(fbC) + ' estimated'
+    : (fbC > 0 ? fmt(exactC) + ' exact (+' + fmt(fbC) + ' if estimates on)' : 'all exact');
   document.getElementById('kpiToday').textContent = fmt(data.kpis.creditsToday);
   document.getElementById('kpiRequests').textContent = fmtInt(data.kpis.requests);
   document.getElementById('kpiModel').textContent = data.kpis.topModel;
