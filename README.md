@@ -65,6 +65,10 @@ Open the Command Palette (`Ctrl/Cmd+Shift+P`) → **Copilot Credit Lens:**
 
 On startup the extension scans existing logs (backfill) and, while open, ingests new usage live via a file watcher.
 
+> **First run / handing it to a tester?** See [TESTING.md](TESTING.md) for the exact
+> prerequisites, settings, install steps, and the **Enable Debug Logging → Clear All
+> Data → Sync Now → Open Dashboard** order.
+
 ## Settings
 
 All under `copilotCreditLens.*`:

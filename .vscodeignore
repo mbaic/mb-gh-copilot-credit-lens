@@ -17,6 +17,7 @@ tsconfig.json
 package-lock.json
 CLAUDE.md
 ROADMAP.md
+TESTING.md
 
 # Build artifacts
 *.vsix
