@@ -37,6 +37,8 @@ Cloud (server-side) coding-agent runs do not produce local billing logs and are 
 - **Tooltips** on every chart, control and stat explaining what it shows.
 - A compact **status-bar** item (`⚡ AIU this period`) opens the dashboard on click.
 
+![Dashboard Screenshot](.images/copilot-lens-dasboard.png)
+
 ## Prerequisites
 
 - **VS Code 1.90+**
