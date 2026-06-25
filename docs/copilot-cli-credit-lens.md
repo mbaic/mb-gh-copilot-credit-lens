@@ -187,6 +187,30 @@ ledger for **history**.
    strings as escape sequences — **sanitize control characters** before printing
    (the §7.4 rule replaces the webview's `textContent` rule).
 
+### 3.1 The 100% offline guarantee (explicit)
+
+This solution makes **zero network calls at runtime** — both front-ends only read
+local files and (for the extension) talk to the host CLI over local process IPC.
+Concretely:
+
+- **Standalone `ccl` binary:** reads `~/.copilot/session-state/**` and its own
+  ledger via `fs/promises`; renders to the terminal. Nothing leaves the machine.
+  Fully usable on an air-gapped box.
+- **Extension shim:** `session.rpc.usage.getMetrics()` is **local IPC** between
+  our forked Node process and the Copilot CLI host — not a network request. Our
+  code never opens a socket. *(The Copilot CLI host itself contacts GitHub to do
+  its AI work, but that is the host, not our add-on; we add no new traffic.)*
+- **The only non-runtime network touchpoints, both avoidable for air-gap:**
+  1. *Installing* the tool (npm/tarball download) — a one-time step like any
+     install; ship the `.tgz` / extension folder on a USB stick for true air-gap.
+  2. *Dev-time* typings for `@github/copilot-sdk`. To keep even the build
+     network-free, **vendor a local `copilot-sdk.d.ts`** that declares just the
+     `joinSession`/`session.rpc` surface we use, instead of adding the SDK as a
+     dev dependency. At runtime the SDK is provided by the host CLI regardless.
+
+So: **runtime = 100% offline, no exceptions.** Build/install can also be made
+offline by vendoring the one type file and distributing the artifact directly.
+
 ---
 
 ## 4. Architecture: one core, two front-ends
