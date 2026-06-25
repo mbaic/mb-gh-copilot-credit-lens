@@ -1,14 +1,37 @@
 # Copilot Credit Lens for the GitHub Copilot CLI — Implementation Spec
 
-> **Status:** design / RFC. Target line: a sibling deliverable to the VS Code
-> extension in this repo, bringing the same local-first credit & token analytics
-> to the **GitHub Copilot CLI** (the agentic terminal coding assistant that
-> stores state under `~/.copilot/`).
+> **Status:** ✅ **implemented** (both front-ends shipped). This document is the
+> design rationale; for install/usage/testing see
+> [`cli-usage.md`](cli-usage.md).
 >
 > **Audience:** maintainers of `mb-gh-copilot-credit-lens`.
 > **Author intent:** preserve every non-negotiable invariant of the VS Code
 > extension (offline, read-only, zero-dependency, honest credits) while adapting
 > the *presentation* from a webview to a terminal.
+
+> ### Implementation status (as built)
+>
+> Shipped: `src/cli.ts` (standalone `ccl`), `src/render-tty.ts`, `src/config.ts`,
+> `src/live.ts`, `extension/credit-lens/extension.mjs` (the `/credits` shim),
+> plus `scripts/build-cli.mjs` and `scripts/install-extension.mjs`. The shared
+> core (`types`, `rates`, `csv`, `aggregate`, `ledger`, `paths`, `parsers`,
+> `scanner`) is reused unchanged except for one additive line.
+>
+> **Deliberate deviation from §6 below — no `modelMetrics` parser expansion.**
+> The repo's existing parser already extracts CLI usage from per-call
+> `llm_request` lines (see the internal spec §5.3: top-level `model` +
+> `inputTokens`/`outputTokens` + `copilotUsageNanoAiu`). Adding a *second* path
+> that also expands `session.shutdown.modelMetrics` aggregates would risk
+> **double-counting** the same usage and would change the numbers the current
+> `.vsix` produces — which is non-negotiable to avoid. So the **only** shared
+> change is recognising the `totalNanoAiu` alias (§6.1, item 1), which can only
+> upgrade a record's exactness, never create a duplicate. The `modelMetrics`
+> shape is still handled where it is safe and needed — for **live** current-
+> session metrics — inside `live.ts` (`mapMetrics`), which produces fresh rows
+> the ledger doesn't yet have. Revisiting the on-disk `modelMetrics` path would
+> require a real `events.jsonl` sample confirming the per-call vs. aggregate
+> relationship to guarantee no double count. `requestCount`/`premiumRequests`
+> (§6.2) were likewise deferred for the same reason.
 
 ---
 

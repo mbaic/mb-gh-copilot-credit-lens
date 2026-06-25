@@ -91,7 +91,7 @@ function toEntry(obj: unknown, file: DiscoveredFile, fallbackTs: string): UsageE
   }
 
   const model = pickString(scopes, ['model', 'modelId', 'model_id', 'modelName', 'resolvedModel']);
-  const nanoAiu = pickNumber(scopes, ['copilotUsageNanoAiu', 'usageNanoAiu', 'nanoAiu']);
+  const nanoAiu = pickNumber(scopes, ['copilotUsageNanoAiu', 'usageNanoAiu', 'nanoAiu', 'totalNanoAiu']);
   const inputTokens = pickNumber(scopes, [
     'inputTokens', 'promptTokens', 'input_tokens', 'prompt_tokens', 'promptTokenCount'
   ]);

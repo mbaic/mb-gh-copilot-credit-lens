@@ -4,6 +4,9 @@ node_modules/
 # Compiled output
 out/
 
+# Assembled Copilot CLI extension core (copied from out/ by `npm run build:cli`)
+extension/credit-lens/core/
+
 # Packaged extension
 *.vsix
 

@@ -6,7 +6,12 @@
   "publisher": "MBS",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.90.0",
+    "node": ">=18"
+  },
+  "bin": {
+    "copilot-credit-lens": "./out/cli.js",
+    "ccl": "./out/cli.js"
   },
   "categories": [
     "Other",
@@ -176,7 +181,10 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "audit": "npm audit --audit-level=moderate"
+    "audit": "npm audit --audit-level=moderate",
+    "build:cli": "node scripts/build-cli.mjs",
+    "build:all": "npm run compile && npm run build:cli",
+    "install:extension": "node scripts/install-extension.mjs"
   },
   "devDependencies": {
     "@types/node": "20.14.0",

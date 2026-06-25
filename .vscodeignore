@@ -19,5 +19,13 @@ CLAUDE.md
 ROADMAP.md
 TESTING.md
 
+# Terminal/CLI front-ends — not part of the VS Code extension package.
+out/cli.js
+out/render-tty.js
+out/config.js
+out/live.js
+extension/**
+docs/**
+
 # Build artifacts
 *.vsix

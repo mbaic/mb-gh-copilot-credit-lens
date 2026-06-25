@@ -3,6 +3,35 @@
 All notable changes to **GitHub Copilot Credit Lens** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.x] - 2026-06-25
+
+Terminal edition — two new front-ends, no change to the `.vsix`.
+
+### Added
+- **Standalone CLI** (`copilot-credit-lens` / `ccl`): a fully-offline,
+  zero-dependency command-line tool that renders the dashboard as ANSI and
+  supports `dashboard`, `sync`, `reset`, `export --csv` / `--json`, `clear`, and
+  a live `watch` mode. Configuration via flags > `CCL_*` env vars > a
+  `config.json` > defaults, all mirroring the extension's settings. New `bin`
+  entries (`copilot-credit-lens`, `ccl`).
+- **GitHub Copilot CLI extension**: a `/credits` slash command
+  (`extension/credit-lens/extension.mjs`) that shows the dashboard inside a live
+  Copilot CLI session, merging the on-disk ledger with the current session's live
+  metrics via the host usage RPC. Falls back to ledger-only if the RPC is absent.
+  Installs to `~/.copilot/extensions/credit-lens` via `npm run install:extension`.
+- **Build/assemble scripts** (`build:cli`, `build:all`, `install:extension`) and a
+  pure-ANSI terminal renderer (`render-tty.ts`), config resolver (`config.ts`),
+  and best-effort live-metrics bridge (`live.ts`).
+- **Docs:** `docs/cli-usage.md` (install, commands, configuration, and a complete
+  testing guide) and the design rationale in `docs/copilot-cli-credit-lens.md`.
+
+### Changed
+- **Parser:** recognise the Copilot CLI's `totalNanoAiu` billing field as an
+  exact-credit source (alias alongside `copilotUsageNanoAiu`). Purely additive
+  and backward compatible — existing ledgers and the `.vsix` are unaffected.
+- The terminal front-ends are excluded from the `.vsix` via `.vscodeignore`, so
+  the packaged VS Code extension is byte-for-byte unchanged in scope.
+
 ## [0.1.x] - 2026-06-17
 
 Dashboard clarity & controls.

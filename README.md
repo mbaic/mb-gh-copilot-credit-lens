@@ -147,6 +147,33 @@ code --install-extension mb-gh-copilot-credit-lens-0.1.0.vsix
 
 Or: Extensions panel → `…` menu → **Install from VSIX…**
 
+## Terminal (CLI) edition
+
+Prefer the terminal, or live in the **GitHub Copilot CLI**? The same analytics
+ship as two terminal front-ends over the same dependency-free core — they do
+**not** change the `.vsix`:
+
+- **`copilot-credit-lens` / `ccl`** — a standalone, fully-offline command-line
+  tool (Node ≥ 18). Renders the dashboard as ANSI, with `sync`, `export --csv`,
+  `export --json`, `reset`, `clear`, and a live `watch` mode.
+  ```bash
+  npm run build:all          # compile + assemble
+  node out/cli.js dashboard --period allTime
+  # or install on PATH:  npm pack && npm i -g ./mb-gh-copilot-credit-lens-*.tgz
+  ```
+- **A Copilot CLI extension** — registers a `/credits` slash command that shows
+  the dashboard inside a live Copilot CLI session (1.0.56+), enriched with the
+  current session's live usage.
+  ```bash
+  npm run install:extension  # -> ~/.copilot/extensions/credit-lens
+  #   enable "EXTENSIONS" in ~/.copilot/settings.json, restart, then:  /credits
+  ```
+
+Both read only `~/.copilot/session-state/*/events.jsonl` (read-only) and keep
+their own ledger. Full instructions, flags, configuration and a **complete
+testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**; the design
+rationale is in **[docs/copilot-cli-credit-lens.md](docs/copilot-cli-credit-lens.md)**.
+
 ## Development
 
 ```bash
