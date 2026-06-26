@@ -9,19 +9,33 @@
 
 // Matched by longest known prefix against the lowercased model id, so version
 // suffixes (e.g. "claude-sonnet-4.6", "gpt-4o-mini-2024-07-18") need no entry.
-/** Premium-request multipliers keyed by a normalized model family prefix. */
+/** Premium-request multipliers keyed by a normalized model family prefix.
+ *  Since 2026-06-01 GitHub bills by token consumption (1 AI Credit = $0.01);
+ *  these per-request estimates are calibrated from the legacy multipliers and
+ *  used only when exact copilotUsageNanoAiu is absent from the log. */
 const MODEL_MULTIPLIERS: Record<string, number> = {
-  'gpt-4o-mini': 0,
-  'gpt-4o': 0,
-  'gpt-4.1': 0,
-  'gpt-5-mini': 0,
+  // GPT-4 family — cheap tier under token billing
+  'gpt-4o-mini': 0.1,
+  'gpt-4o': 0.25,
+  'gpt-4.1-mini': 0.1,
+  'gpt-4.1': 0.25,
+  // GPT-5 mini variants (0.33x legacy)
+  'gpt-5-mini': 0.33,
+  'gpt-5.4-mini': 0.33,
+  'gpt-5.5-mini': 0.33,
+  // GPT-5 full variants (1x legacy)
+  'gpt-5.4': 1,
+  'gpt-5.5': 1,
   'gpt-5': 1,
+  // Reasoning models (1x legacy)
   'o3-mini': 1,
   'o3': 1,
   'o4-mini': 1,
-  'claude-haiku': 1,
+  // Claude family
+  'claude-haiku': 0.33,
   'claude-sonnet': 1,
-  'claude-opus': 10,
+  'claude-opus': 15,
+  // Google
   'gemini': 0.25
 };
 
