@@ -73,6 +73,35 @@ export function configFilePath(): string {
   return path.join(storageDir(), 'config.json');
 }
 
+/** Path to the optional user-editable rate overrides file. */
+export function ratesOverridePath(): string {
+  return path.join(storageDir(), 'rates.json');
+}
+
+/**
+ * Load user rate overrides from rates.json in the storage directory.
+ * Returns {} when absent, empty, or malformed — never throws.
+ * Only numeric, finite, non-negative values are accepted; all else ignored.
+ */
+export async function loadRatesOverrides(): Promise<Record<string, number>> {
+  try {
+    const raw = await fsp.readFile(ratesOverridePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    const result: Record<string, number> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) {
+        result[k] = v;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
 /** Inclusive billing-start epoch (ms), never earlier than the billing floor. */
 export function billingStartMs(cfg: CclConfig): number {
   const floor = Date.parse(`${BILLING_FLOOR}T00:00:00Z`);

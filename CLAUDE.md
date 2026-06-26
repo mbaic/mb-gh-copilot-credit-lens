@@ -63,10 +63,11 @@ When changing code, preserve all of these:
 ## Commands
 
 ```bash
-npm ci            # clean install from lockfile
-npm run compile   # tsc -> out/  (strict mode; must be warning-free)
+npm ci                       # clean install from lockfile
+npm run compile              # tsc -> out/  (strict mode; must be warning-free)
+npm run build:cli            # assemble extension/credit-lens/core/ from out/
 npm audit --audit-level=moderate
-npx @vscode/vsce package   # produce mb-gh-copilot-credit-lens-<version>.vsix
+npx @vscode/vsce package     # produce mb-gh-copilot-credit-lens-<version>.vsix
 ```
 
 There is no formal unit-test runner. Validate logic changes with a quick Node

@@ -13,48 +13,47 @@ core** (the same modules the `.vsix` uses):
 Both read **only** `~/.copilot/session-state/*/events.jsonl` (read-only) and
 write only their own ledger/exports. **Fully offline — zero network calls.**
 
-> This does **not** affect the VS Code extension. The `.vsix` is built and
-> packaged exactly as before (the CLI-only files are excluded from it via
-> `.vscodeignore`). The single shared-core change for this feature — recognising
-> the CLI's `totalNanoAiu` billing field — is purely additive and backward
-> compatible.
+> **What generates data?** Run `gh copilot explain "…"` or `gh copilot suggest "…"`
+> in your terminal. These write `events.jsonl` to `~/.copilot/session-state/`.
+> The standalone Copilot coding agent (workspace sessions) uses a different
+> format (`workspace.yaml`) and does **not** produce data for these tools.
 
 ---
 
-## 1. Build
+## 1. Install (no build required)
 
+Download the latest release artifacts from the
+[GitHub Releases page](https://github.com/mbaic/mb-gh-copilot-credit-lens/releases/latest):
+
+| File | What it is |
+|---|---|
+| `mb-gh-copilot-credit-lens-<v>.vsix` | VS Code extension |
+| `mb-gh-copilot-credit-lens-<v>.tgz` | Standalone `ccl` CLI |
+| `copilot-cli-extension-credit-lens-<v>.zip` | Copilot CLI `/credits` extension |
+
+### Standalone CLI (`ccl`)
+
+Requires **Node.js 18+**.
+
+**macOS / Linux:**
 ```bash
-npm ci
-npm run build:all      # = npm run compile (tsc -> out/) + npm run build:cli
-```
-
-- `npm run compile` emits the compiled JS to `out/` (this is also what the
-  `.vsix` build runs — it must stay warning-free).
-- `npm run build:cli` assembles the extension's dependency-free `core/` from
-  `out/` into `extension/credit-lens/core/`.
-
----
-
-## 2. Standalone CLI (`ccl`)
-
-### Install
-
-Run it straight from the repo:
-
-```bash
-node out/cli.js --help
-```
-
-…or install it on your `PATH` (uses the `bin` entry in `package.json`):
-
-```bash
-npm pack                                   # -> mb-gh-copilot-credit-lens-<v>.tgz
 npm i -g ./mb-gh-copilot-credit-lens-<v>.tgz
-copilot-credit-lens --help                 # or: ccl --help
+ccl --help
 ```
 
-For a fully air-gapped install, copy the `.tgz` to the target machine and run the
-`npm i -g ./…tgz` there — no registry access needed.
+**Windows PowerShell:**
+```powershell
+npm i -g .\mb-gh-copilot-credit-lens-<v>.tgz
+ccl --help
+```
+
+### Copilot CLI extension (`/credits`)
+
+See [section 3](#3-copilot-cli-extension-credits) below.
+
+---
+
+## 2. Standalone CLI (`ccl`) — commands & flags
 
 ### Commands
 
@@ -67,6 +66,7 @@ For a fully air-gapped install, copy the `.tgz` to the target machine and run th
 | `ccl export --json [-o file]` | Full ledger backup (`-o`) or entries to stdout |
 | `ccl clear --yes` | Wipe the tool's own ledger (never your Copilot logs) |
 | `ccl watch` | Live view: re-scan + re-render on change. Ctrl-C to stop |
+| `ccl rates` | Show current estimation rates and the override file path |
 | `ccl version` / `ccl help` | Version / usage |
 
 ### Flags
@@ -86,97 +86,173 @@ For a fully air-gapped install, copy the `.tgz` to the target machine and run th
 
 ### Configuration (precedence: flags > env > config file > defaults)
 
-Defaults mirror the VS Code extension exactly.
-
 - **Env vars:** `CCL_PERIOD`, `CCL_INCLUDE_ESTIMATED`, `CCL_USD_PER_CREDIT`,
   `CCL_BILLING_START`, `CCL_BACKUP_DIR`, `NO_COLOR`.
-- **Config file** (`config.json` in the data directory below), e.g.:
+- **Config file** (`config.json` in the data directory), e.g.:
   ```json
   {
     "period": "allTime",
     "includeEstimated": false,
     "usdPerCredit": 0.01,
     "billingStartDate": "2026-06-01",
-    "backupDirectory": "",
     "top": 0
   }
   ```
-- **Billing floor:** `billingStartDate` is clamped to `2026-06-01`; nothing
-  earlier is ever counted (identical to the extension).
 
 ### Data locations
 
 | | Linux | macOS | Windows |
 |---|---|---|---|
 | Reads (read-only) | `~/.copilot/session-state/` | same | `%USERPROFILE%\.copilot\session-state\` |
-| Ledger + config | `$XDG_DATA_HOME/copilot-credit-lens/` or `~/.local/share/copilot-credit-lens/` | `~/Library/Application Support/copilot-credit-lens/` | `%APPDATA%\copilot-credit-lens\` |
+| Ledger + config | `~/.local/share/copilot-credit-lens/` | `~/Library/Application Support/copilot-credit-lens/` | `%APPDATA%\copilot-credit-lens\` |
 
 > The terminal tool keeps its **own** ledger, separate from the VS Code
-> extension's, so the two never contend for the same file. Use `export --json`
-> on either to combine them offline if you want a unified view.
+> extension's, so the two never contend for the same file.
 
 ---
 
 ## 3. Copilot CLI extension (`/credits`)
 
+The extension registers a `/credits` slash command inside an **interactive**
+Copilot CLI session. It shows the same dashboard as `ccl`, plus live metrics
+for the current session via the host's usage RPC.
+
 ### Requirements
-- GitHub Copilot CLI **1.0.56+**
-- `~/.copilot/settings.json` with extensions enabled:
-  ```json
-  { "experimental": ["EXTENSIONS"] }
-  ```
+- GitHub Copilot CLI **1.0.56+** (installed via `gh copilot` or standalone `copilot`)
+- Extensions enabled in `~/.copilot/settings.json`
 
-### Install
+### Install — Windows PowerShell
 
-```bash
-npm run build:all
-npm run install:extension            # user-scoped: ~/.copilot/extensions/credit-lens
-# or project-scoped (committed to a repo, shared with a team):
-node scripts/install-extension.mjs --project   # -> ./.github/extensions/credit-lens
-```
+```powershell
+# 1. Extract the zip to the extensions folder:
+Expand-Archive .\copilot-cli-extension-credit-lens-<v>.zip `
+  -DestinationPath "$env:USERPROFILE\.copilot\extensions"
 
-The installer copies `extension.mjs` + `core/` into place and prints the
-one-line settings change to enable extensions (it never edits your
-`settings.json` for you). Restart the Copilot CLI, then:
+# 2. Verify the files are in place:
+ls "$env:USERPROFILE\.copilot\extensions\credit-lens\"
+# Should show: extension.mjs  core\
 
-```
+# 3. Enable extensions in settings.json (create the file if it doesn't exist):
+notepad "$env:USERPROFILE\.copilot\settings.json"
+# Add (or merge into existing file):
+# { "experimental": ["EXTENSIONS"] }
+
+# 4. Restart any running Copilot CLI session.
+
+# 5. Start an interactive session:
+gh copilot          # or: copilot
+
+# 6. Verify the extension loaded — inside the session type:
+/extensions
+# Should list "credit-lens" as installed
+
+# 7. Use the command:
 /credits
 /credits allTime --estimated
 /credits last3Months --no-color
 ```
 
-`/credits` renders the same dashboard as `ccl`, computed from your on-disk ledger
-(a quick CLI-only scan runs first) and merged with **live metrics for the current
-session** via the host's usage RPC. If the live RPC is unavailable, the command
-still renders full history from the ledger.
+### Install — macOS / Linux
+
+```bash
+# 1. Extract to the extensions folder:
+unzip copilot-cli-extension-credit-lens-<v>.zip -d ~/.copilot/extensions/
+
+# 2. Enable extensions:
+# Edit ~/.copilot/settings.json and add:
+# { "experimental": ["EXTENSIONS"] }
+
+# 3. Restart Copilot CLI and start an interactive session:
+gh copilot   # or: copilot
+
+# Inside the session:
+/credits
+/credits allTime --estimated
+```
+
+### Important: interactive session required
+
+Slash commands (`/credits`, `/extensions`, etc.) only work inside an
+**interactive** Copilot CLI session — not in one-shot commands like
+`gh copilot explain "…"`. Start a session with `gh copilot` or `copilot`
+(no subcommand), then type `/credits`.
 
 > `@github/copilot-sdk` is provided by the host CLI at runtime — it is **not**
 > installed by this package and is **not** a runtime dependency.
 
 ---
 
-## 4. How to test
+## 4. Keeping model rates up to date
 
-No formal unit runner is used (matching the repo convention); validate against
-the compiled `out/*.js` with a quick smoke test, then `npm run compile` and
-`npm audit`.
+`ccl` estimates credits when your Copilot CLI logs don't include exact billing
+values (`copilotUsageNanoAiu`). The estimates use a built-in rate table
+(see `src/rates.ts`). When GitHub adds a new model or changes a rate:
 
-### 4.1 Build & static checks
+### Option A — Update the tool (recommended)
 
-```bash
-npm ci
-npm run compile                 # strict tsc; must be warning-free
-npm audit --audit-level=moderate   # must report 0 vulnerabilities
-npm run build:cli               # assembles extension/credit-lens/core
+Download the latest `.tgz` from the
+[releases page](https://github.com/mbaic/mb-gh-copilot-credit-lens/releases/latest)
+and reinstall:
+
+```powershell
+npm i -g .\mb-gh-copilot-credit-lens-<v>.tgz
+ccl clear --yes && ccl sync
 ```
 
-### 4.2 End-to-end smoke test (synthetic data, isolated HOME)
+### Option B — Local override (immediate, no reinstall)
 
-This exercises discovery → parse → ledger → aggregate → render without touching
-your real `~/.copilot`. It points `HOME` at a throwaway directory.
+Create a `rates.json` file in the tool's data directory with your additions:
+
+**Windows:** `%APPDATA%\copilot-credit-lens\rates.json`  
+**macOS:** `~/Library/Application Support/copilot-credit-lens/rates.json`  
+**Linux:** `~/.local/share/copilot-credit-lens/rates.json`
+
+```json
+{
+  "my-new-model": 0.5,
+  "claude-new-opus": 20
+}
+```
+
+Keys are **model prefixes** — an entry `"claude-opus"` covers
+`claude-opus-4.8`, `claude-opus-4.9`, etc. (longest prefix wins).
+
+After editing `rates.json`, re-import so stored estimates are recomputed:
+
+```powershell
+ccl clear --yes && ccl sync
+```
+
+### View current rates
 
 ```bash
-# 1) Create a fake session log.
+ccl rates
+```
+
+Shows all effective rates (built-in + any overrides) and prints the exact path
+to your override file.
+
+---
+
+## 5. Testing
+
+### Basic workflow test
+
+```bash
+# Generate some data by using gh copilot in your terminal:
+gh copilot explain "ls -la"
+
+# Import and view:
+ccl sync
+ccl dashboard --estimated
+```
+
+Expected: Dashboard shows requests, model `gpt-5.4-mini` (or whichever model
+was used), estimated credits at 0.33/request, trust chip `● estimated`.
+
+### Smoke test with synthetic data (isolated, no real logs touched)
+
+```bash
 export HOME="$(mktemp -d)"
 export XDG_DATA_HOME="$HOME/.local/share"
 SESS="$HOME/.copilot/session-state/sess-001"
@@ -187,95 +263,49 @@ cat > "$SESS/events.jsonl" <<'JSONL'
 {"type":"llm_request","ts":"2026-06-12T10:00:00Z","model":"gpt-5","inputTokens":800,"outputTokens":40}
 { this line is malformed and must be skipped
 JSONL
-printf 'cwd: /home/me/my-project\n' > "$SESS/workspace.yaml"
 
-# 2) Sync and view (run from the repo root).
 node out/cli.js sync
 node out/cli.js dashboard --period allTime --no-color --no-sync
-node out/cli.js dashboard --period allTime --estimated --no-sync --json
 ```
 
-**Expected results**
+Expected: 1 file, 3 entries, 1 warning. Exact total = 3.5 credits. With
+`--estimated` = 4.5 credits. Trust chip = `● mixed`.
 
-- `sync` reports `1 file(s), 3 new entries` and a warning for the malformed line
-  (it must not abort the scan).
-- Exact-only `allTime` total = **3.5000 credits** (1.5 from `copilotUsageNanoAiu`
-  + 2.0 from the new `totalNanoAiu` alias). The `gpt-5` no-billing row is an
-  **estimate**, excluded from the total. Trust chip = **mixed**.
-- `--estimated` total = **4.5000** (`exact 3.5 + fallback 1.0`); the JSON shows
-  `kpis.creditsPeriod: 4.5`, `totals.exactCredits: 3.5`, `totals.fallbackCredits:
-  1`, `estimatedRequestCount: 1`.
-- The footer reconciles honestly: with estimates on it reads
-  `Exact 3.5 + estimated 1.0 = 4.5`; with them off it reads
-  `Exact 3.5 credits (+ 1.0 estimated, excluded)`.
-
-**Things worth asserting explicitly**
-
-- *Billing floor:* change a timestamp to `2026-05-31` and confirm that entry is
-  excluded from *All time* (the floor is `2026-06-01`).
-- *Idempotency:* run `sync` twice — the second run reports `0 new entries`
-  (byte-cursor + id de-dup).
-- *CSV:* `node out/cli.js export --csv --all` emits a header row plus one row per
-  entry, with `creditsExact` populated for the two billed rows.
-- *Terminal safety:* a model id containing an ANSI escape renders inert — control
-  characters are stripped before printing.
-
-### 4.3 Extension load path (without the live CLI)
-
-You can verify the extension's shared-core wiring without a running Copilot CLI
-(the host-provided SDK is only needed for the actual `/credits` invocation):
+### Rates override test
 
 ```bash
-node --input-type=module -e '
-import { createRequire } from "node:module";
-const require = createRequire(process.cwd()+"/extension/credit-lens/core/x.js");
-const { mapMetrics } = require("./live.js");
-const { aggregate } = require("./aggregate.js");
-const { renderDashboard } = require("./render-tty.js");
-const live = mapMetrics({ modelMetrics: { "claude-sonnet-4.6":
-  { requests:{count:4}, usage:{inputTokens:1200,outputTokens:90}, totalNanoAiu: 4000000000 } } }, "live-1");
-const data = aggregate(live, "allTime", false, [], null, new Date(), {}, Date.parse("2026-06-01T00:00:00Z"), 0.01);
-process.stdout.write(renderDashboard(data, { width: 80, color: false, top: 0 }));
-'
+# Create an override:
+mkdir -p ~/.local/share/copilot-credit-lens
+echo '{"gpt-5": 2.5}' > ~/.local/share/copilot-credit-lens/rates.json
+
+ccl rates              # shows gpt-5 at 2.5 with "← override" label
+ccl clear --yes        # wipe stale estimates
+ccl sync               # re-import with new rate
+ccl dashboard --estimated
 ```
 
-This confirms the CommonJS `core/` loads from the ESM shim and that live metrics
-map to exact credits (4.0) and render.
+Expected: `gpt-5` requests now show 2.5 credits each.
 
-### 4.4 Real-world test (optional)
-
-If you use the Copilot CLI:
-
-1. Run a few Copilot CLI sessions so `~/.copilot/session-state/` has data.
-2. `ccl sync && ccl dashboard --period allTime`.
-3. Install the extension (§3), enable it, restart the CLI, run `/credits` — the
-   numbers should match `ccl`, with the current session's live usage added.
-
-### 4.5 Confirm the `.vsix` is unaffected
+### Confirm VSIX is unaffected
 
 ```bash
 npm run compile
-npx @vscode/vsce package        # produces mb-gh-copilot-credit-lens-<v>.vsix
-npx @vscode/vsce ls             # list packaged files
+npx @vscode/vsce package
+npx @vscode/vsce ls
 ```
 
-The packaged file list should **not** include `out/cli.js`, `out/render-tty.js`,
-`out/config.js`, `out/live.js`, `extension/**`, or `docs/**` — they are excluded
-in `.vscodeignore`. The extension's commands and dashboard behave exactly as
-before.
+The packaged file list must **not** include `out/cli.js`, `out/render-tty.js`,
+`out/config.js`, `out/live.js`, `extension/**`, or `docs/**`.
 
 ---
 
-## 5. Security & offline posture
+## 6. Security & offline posture
 
 - **No network calls, no `child_process`, no `eval`** — local file reads via
-  `fs/promises` only; `crypto` for ids. The extension's live-metrics call is
-  local process IPC with the host CLI, not a network request.
+  `fs/promises` only.
 - **Read-only** on Copilot's files; writes only the tool's own ledger/exports.
-- **Zero runtime dependencies.** The ANSI renderer is hand-rolled; the
-  `@github/copilot-sdk` used by the extension is provided by the host CLI.
+- **Zero runtime dependencies.** The ANSI renderer is hand-rolled.
 - **Resilient parsing:** unknown fields ignored, missing ones tolerated, one bad
   line never aborts a scan.
-
-See [`copilot-cli-credit-lens.md`](copilot-cli-credit-lens.md) for the full
-design rationale and architecture.
+- **Terminal safety:** all log-derived strings (model names, workspace paths) are
+  stripped of ANSI escape sequences before printing.

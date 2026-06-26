@@ -171,15 +171,15 @@ ccl dashboard
 
 Requires **GitHub Copilot CLI 1.0.56+**. Download **`copilot-cli-extension-credit-lens-<version>.zip`** then:
 
-**macOS / Linux:**
-```bash
-mkdir -p ~/.copilot/extensions
-unzip copilot-cli-extension-credit-lens-<version>.zip -d ~/.copilot/extensions/
-```
-
 **Windows PowerShell:**
 ```powershell
-Expand-Archive .\copilot-cli-extension-credit-lens-<version>.zip -DestinationPath "$env:USERPROFILE\.copilot\extensions"
+Expand-Archive .\copilot-cli-extension-credit-lens-<version>.zip `
+  -DestinationPath "$env:USERPROFILE\.copilot\extensions"
+```
+
+**macOS / Linux:**
+```bash
+unzip copilot-cli-extension-credit-lens-<version>.zip -d ~/.copilot/extensions/
 ```
 
 Then enable extensions in `~/.copilot/settings.json` (create if it doesn't exist):
@@ -187,11 +187,33 @@ Then enable extensions in `~/.copilot/settings.json` (create if it doesn't exist
 { "experimental": ["EXTENSIONS"] }
 ```
 
-Restart the Copilot CLI and type `/credits` inside a session.
+Start an **interactive** Copilot CLI session (`gh copilot` or `copilot` — no subcommand), then type `/credits`. The command works inside the session; one-shot commands like `gh copilot explain "…"` do not support slash commands.
 
 ---
 
-Both terminal tools read only `~/.copilot/session-state/*/events.jsonl` (read-only), keep their own separate ledger, and make **zero network calls**. Full commands, flags, configuration and a **complete testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**.
+> **What generates data?** Use `gh copilot explain "…"` or `gh copilot suggest "…"`.
+> These write usage logs that `ccl` and `/credits` read. The standalone Copilot
+> coding agent (workspace sessions with `workspace.yaml`) uses a different format
+> and is not tracked by these tools.
+
+Both terminal tools read only `~/.copilot/session-state/*/events.jsonl` (read-only), keep their own separate ledger, and make **zero network calls**. Full commands, flags, rates configuration, and a **complete testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**.
+
+### Keeping model rates current
+
+When a new model appears with wrong or default estimates, you have two options:
+
+1. **Reinstall the latest `.tgz`** — rates are updated in each release.
+2. **Local override** — create `rates.json` in the tool's data directory:
+   - Windows: `%APPDATA%\copilot-credit-lens\rates.json`
+   - macOS: `~/Library/Application Support/copilot-credit-lens/rates.json`
+   - Linux: `~/.local/share/copilot-credit-lens/rates.json`
+
+   ```json
+   { "my-new-model": 0.5 }
+   ```
+
+   Then run `ccl clear --yes && ccl sync` to recompute stored estimates.
+   Run `ccl rates` to see all current rates and the exact override file path.
 
 ## Development
 

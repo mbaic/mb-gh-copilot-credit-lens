@@ -12,8 +12,9 @@
 /** Premium-request multipliers keyed by a normalized model family prefix.
  *  Since 2026-06-01 GitHub bills by token consumption (1 AI Credit = $0.01);
  *  these per-request estimates are calibrated from the legacy multipliers and
- *  used only when exact copilotUsageNanoAiu is absent from the log. */
-const MODEL_MULTIPLIERS: Record<string, number> = {
+ *  used only when exact copilotUsageNanoAiu is absent from the log.
+ *  User overrides loaded from rates.json in the storage directory win over these. */
+let MODEL_MULTIPLIERS: Record<string, number> = {
   // GPT-4 family — cheap tier under token billing
   'gpt-4o-mini': 0.1,
   'gpt-4o': 0.25,
@@ -45,6 +46,19 @@ const MODEL_MULTIPLIERS: Record<string, number> = {
 
 /** Fallback multiplier for models not present in the table. */
 const DEFAULT_MULTIPLIER = 1;
+
+/**
+ * Merge user-supplied overrides on top of the built-in table. Call once at
+ * CLI startup before any sync or estimation work. Safe to call with {}.
+ */
+export function applyRateOverrides(overrides: Record<string, number>): void {
+  MODEL_MULTIPLIERS = { ...MODEL_MULTIPLIERS, ...overrides };
+}
+
+/** Snapshot of the currently effective rate table (built-ins + any overrides). */
+export function effectiveRates(): Readonly<Record<string, number>> {
+  return MODEL_MULTIPLIERS;
+}
 
 /**
  * Map a raw model id (e.g. "claude-sonnet-4-5", "gpt-4o-2024-08-06") onto a

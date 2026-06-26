@@ -18,7 +18,8 @@ import { aggregate, filterByPeriod } from './aggregate';
 import { toCsv } from './csv';
 import { cliSessionRoot } from './paths';
 import { renderDashboard } from './render-tty';
-import { CclConfig, resolveConfig, storageDir, billingStartMs, isPeriod } from './config';
+import { CclConfig, resolveConfig, storageDir, billingStartMs, isPeriod, ratesOverridePath, loadRatesOverrides } from './config';
+import { applyRateOverrides, effectiveRates } from './rates';
 
 /** The CLI tool only ever scans the Copilot CLI source — never VS Code storage. */
 const CLI_SCAN: ScanConfig = { roots: [], includeChat: false, includeDebug: false, includeCli: true };
@@ -50,6 +51,16 @@ async function main(argv: string[]): Promise<number> {
   if (flags.version || command === 'version') {
     process.stdout.write(`copilot-credit-lens ${readVersion()}\n`);
     return 0;
+  }
+
+  // Load user rate overrides before any sync/estimation work.
+  const rateOverrides = await loadRatesOverrides();
+  if (Object.keys(rateOverrides).length > 0) {
+    applyRateOverrides(rateOverrides);
+  }
+
+  if (command === 'rates') {
+    return cmdRates(rateOverrides);
   }
 
   const cfg = applyFlags(await resolveConfig(), flags);
@@ -143,6 +154,27 @@ async function cmdClear(ledger: LedgerStore, flags: Flags): Promise<number> {
   }
   await ledger.clear();
   process.stdout.write('Ledger cleared. Run `ccl sync` to re-ingest from your Copilot CLI logs.\n');
+  return 0;
+}
+
+function cmdRates(userOverrides: Record<string, number>): number {
+  const rates = effectiveRates();
+  const overrideKeys = new Set(Object.keys(userOverrides));
+  const overridePath = ratesOverridePath();
+
+  process.stdout.write('Estimation rates — credits per request (used when exact billing is absent):\n\n');
+  for (const [model, rate] of Object.entries(rates).sort(([a], [b]) => a.localeCompare(b))) {
+    const tag = overrideKeys.has(model) ? '  ← override' : '';
+    process.stdout.write(`  ${model.padEnd(28)} ${rate}${tag}\n`);
+  }
+  process.stdout.write(`  ${'(unknown models — fallback)'.padEnd(28)} 1\n`);
+  process.stdout.write(`\nOverride file: ${overridePath}\n`);
+  process.stdout.write('\nTo add a new model or correct a rate, create/edit that file, e.g.:\n');
+  process.stdout.write('  { "my-new-model": 0.5, "claude-new-opus": 20 }\n');
+  process.stdout.write('\nPrefix matching: an entry "claude-opus" covers claude-opus-4.8, claude-opus-4.9, etc.\n');
+  process.stdout.write('After editing, re-import so stored estimates are recomputed:\n');
+  process.stdout.write('  ccl clear --yes && ccl sync\n');
+  process.stdout.write('\nRate source: https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing\n');
   return 0;
 }
 
@@ -362,6 +394,7 @@ COMMANDS
   export      Export usage: --csv (period-scoped) or --json (full ledger backup).
   clear       Wipe the tool's own ledger (requires --yes). Never touches Copilot logs.
   watch       Live view: re-scan and re-render when CLI sessions change. Ctrl-C to stop.
+  rates       Show estimation rates and the path to the local override file.
   version     Print the version.
   help        Show this help.
 
