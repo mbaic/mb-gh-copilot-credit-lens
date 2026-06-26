@@ -137,42 +137,61 @@ by-model table. Compare against the dashboard (period **All time** / **Current
 period**, estimates off). They should match; the script is read-only and makes
 no network calls.
 
-## Installation (local `.vsix`)
+## Installation
 
-This extension is distributed as a local `.vsix`, not via the Marketplace.
+All three artifacts are attached to every [GitHub Release](https://github.com/mbaic/mb-gh-copilot-credit-lens/releases/latest) — no cloning or building required. Download the files for the tools you want and follow the steps below.
+
+### 1 — VS Code extension (`.vsix`)
+
+Download **`mb-gh-copilot-credit-lens-<version>.vsix`** then:
 
 ```bash
-code --install-extension mb-gh-copilot-credit-lens-0.1.0.vsix
+code --install-extension mb-gh-copilot-credit-lens-<version>.vsix
 ```
 
 Or: Extensions panel → `…` menu → **Install from VSIX…**
 
-## Terminal (CLI) edition
+### 2 — Standalone CLI (`ccl`)
 
-Prefer the terminal, or live in the **GitHub Copilot CLI**? The same analytics
-ship as two terminal front-ends over the same dependency-free core — they do
-**not** change the `.vsix`:
+Requires **Node.js 18+**. Download **`mb-gh-copilot-credit-lens-<version>.tgz`** then:
 
-- **`copilot-credit-lens` / `ccl`** — a standalone, fully-offline command-line
-  tool (Node ≥ 18). Renders the dashboard as ANSI, with `sync`, `export --csv`,
-  `export --json`, `reset`, `clear`, and a live `watch` mode.
-  ```bash
-  npm run build:all          # compile + assemble
-  node out/cli.js dashboard --period allTime
-  # or install on PATH:  npm pack && npm i -g ./mb-gh-copilot-credit-lens-*.tgz
-  ```
-- **A Copilot CLI extension** — registers a `/credits` slash command that shows
-  the dashboard inside a live Copilot CLI session (1.0.56+), enriched with the
-  current session's live usage.
-  ```bash
-  npm run install:extension  # -> ~/.copilot/extensions/credit-lens
-  #   enable "EXTENSIONS" in ~/.copilot/settings.json, restart, then:  /credits
-  ```
+```bash
+npm i -g ./mb-gh-copilot-credit-lens-<version>.tgz
+ccl --help
+ccl dashboard
+```
 
-Both read only `~/.copilot/session-state/*/events.jsonl` (read-only) and keep
-their own ledger. Full instructions, flags, configuration and a **complete
-testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**; the design
-rationale is in **[docs/copilot-cli-credit-lens.md](docs/copilot-cli-credit-lens.md)**.
+**Windows PowerShell:**
+```powershell
+npm i -g .\mb-gh-copilot-credit-lens-<version>.tgz
+ccl dashboard
+```
+
+### 3 — Copilot CLI `/credits` extension
+
+Requires **GitHub Copilot CLI 1.0.56+**. Download **`copilot-cli-extension-credit-lens-<version>.zip`** then:
+
+**macOS / Linux:**
+```bash
+mkdir -p ~/.copilot/extensions
+unzip copilot-cli-extension-credit-lens-<version>.zip -d ~/.copilot/extensions/
+```
+
+**Windows PowerShell:**
+```powershell
+Expand-Archive .\copilot-cli-extension-credit-lens-<version>.zip -DestinationPath "$env:USERPROFILE\.copilot\extensions"
+```
+
+Then enable extensions in `~/.copilot/settings.json` (create if it doesn't exist):
+```json
+{ "experimental": ["EXTENSIONS"] }
+```
+
+Restart the Copilot CLI and type `/credits` inside a session.
+
+---
+
+Both terminal tools read only `~/.copilot/session-state/*/events.jsonl` (read-only), keep their own separate ledger, and make **zero network calls**. Full commands, flags, configuration and a **complete testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**.
 
 ## Development
 
@@ -188,7 +207,7 @@ Press **F5** in VS Code to launch the Extension Development Host. Package a VSIX
 
 ## Release process
 
-Releases are produced automatically by CI (`npm ci` → `npm audit` → version stamp → compile → `vsce package` → GitHub Release with the `.vsix` attached):
+Releases are produced automatically by CI (`npm ci` → `npm audit` → version stamp → compile → package → GitHub Release with all three artifacts attached):
 
 - **Every push to `main`** publishes a new GitHub Release with an auto-incremented version `v<major>.<minor>.<run_number>` — the `major.minor` come from `package.json`, and the patch is the workflow run number, so each commit gets a unique, increasing version with no manual bump.
 - **A `vX.Y.Z` tag** releases that exact version.
