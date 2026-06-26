@@ -60,6 +60,9 @@ jobs:
       - name: Compile TypeScript
         run: npm run compile
 
+      - name: Build CLI extension core
+        run: npm run build:cli
+
       - name: Package VSIX
         id: package
         run: |
@@ -68,12 +71,29 @@ jobs:
           echo "vsix_path=${VSIX_PATH}" >> "$GITHUB_OUTPUT"
           echo "Packaged: ${VSIX_PATH}"
 
-      - name: Create GitHub Release and upload VSIX
+      - name: Pack standalone CLI tarball
+        id: pack_cli
+        run: |
+          TGZ_PATH="$(npm pack --json | node -e "process.stdin.resume();let b='';process.stdin.on('data',d=>b+=d);process.stdin.on('end',()=>console.log(JSON.parse(b)[0].filename))")"
+          echo "tgz_path=${TGZ_PATH}" >> "$GITHUB_OUTPUT"
+          echo "Packed CLI: ${TGZ_PATH}"
+
+      - name: Zip Copilot CLI extension
+        id: zip_ext
+        run: |
+          EXT_ZIP="copilot-cli-extension-credit-lens-${{ steps.meta.outputs.version }}.zip"
+          cd extension && zip -r "../${EXT_ZIP}" credit-lens/
+          echo "zip_path=${EXT_ZIP}" >> "$GITHUB_OUTPUT"
+          echo "Zipped extension: ${EXT_ZIP}"
+
+      - name: Create GitHub Release and upload artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ steps.meta.outputs.tag }}" \
             "${{ steps.package.outputs.vsix_path }}" \
+            "${{ steps.pack_cli.outputs.tgz_path }}" \
+            "${{ steps.zip_ext.outputs.zip_path }}" \
             --title "${{ steps.meta.outputs.tag }}" \
             --target "${GITHUB_SHA}" \
             --generate-notes
