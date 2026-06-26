@@ -24,6 +24,7 @@ const MODEL_MULTIPLIERS: Record<string, number> = {
   'gpt-5.4-mini': 0.33,
   'gpt-5.5-mini': 0.33,
   // GPT-5 full variants (1x legacy)
+  'gpt-5.3-codex': 1,
   'gpt-5.4': 1,
   'gpt-5.5': 1,
   'gpt-5': 1,
@@ -34,8 +35,11 @@ const MODEL_MULTIPLIERS: Record<string, number> = {
   // Claude family
   'claude-haiku': 0.33,
   'claude-sonnet': 1,
+  'claude-opus-4.6': 10,
+  'claude-opus-4-6': 10,
   'claude-opus': 15,
-  // Google
+  // Google Gemini
+  'gemini-3.1-pro': 0.5,
   'gemini': 0.25
 };
 
