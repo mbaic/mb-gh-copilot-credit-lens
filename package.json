@@ -173,6 +173,14 @@
           "minimum": 0,
           "description": "USD value of one AI Credit, used for the estimated cost figures. GitHub usage-based billing (from 2026-06-01) prices 1 AI Credit at $0.01. Adjust for currency or plan changes. Cost is gross and does not subtract your plan's included monthly allowance.",
           "markdownDescription": "USD value of one **AI Credit**, used for the estimated cost shown on the dashboard. GitHub usage-based billing (from 2026-06-01) prices **1 AI Credit = $0.01**. Adjust for currency/plan changes. The estimated cost is **gross** — it does not subtract your plan's included monthly credit allowance. Set to `0` to hide cost figures."
+        },
+        "copilotCreditLens.otherUsageBufferPercent": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 500,
+          "description": "Percent added on top of the locally-tracked credit total to approximate GitHub-side Copilot usage this extension cannot see (Coding Agent PRs, PR code review requested on github.com/mobile/CLI, other editors or devices). This extension only reads local VS Code/CLI logs, so its totals are always a lower bound on your true GitHub account usage, and there is no reliable way to compute the real gap from local data alone. Compare the dashboard's total for a period against your official usage at github.com > Settings > Billing and licensing > Copilot usage, then set this to the percentage that closes the gap. 0 (default) shows only the local total.",
+          "markdownDescription": "Percent added on top of the locally-tracked credit total to approximate GitHub-side Copilot usage this extension cannot see (**Coding Agent** PRs, **PR code review** requested on github.com/mobile/CLI, other editors or devices). This extension only reads local VS Code/CLI logs, so its totals are always a **lower bound** on your true GitHub account usage — there is no reliable way to compute the real gap from local data alone, so this is never inferred automatically. Compare the dashboard's total for a period against your official usage at **github.com → Settings → Billing and licensing → Copilot usage**, then set this to the percentage that closes the gap. `0` (default) shows only the local total."
         }
       }
     }

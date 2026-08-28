@@ -51,7 +51,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </header>
 
 <section class="controls">
-  <label class="field" title="Reporting period the whole dashboard is filtered to. Nothing before the billing start date (default 2026-06-01) is ever counted, so 'All time' and the rolling 3–12 month windows start there. 'Current period' is the current calendar month.">
+  <label class="field" title="Reporting period the whole dashboard is filtered to. Nothing before the billing start date (default 2026-06-01) is ever counted, so 'All time' and the rolling 3–12 month windows start there. 'Current period' is the current calendar month in UTC, matching GitHub's billing reset.">
     <span>Period</span>
     <select id="period"></select>
   </label>
@@ -65,10 +65,10 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </section>
 
 <section class="kpis">
-  <div class="kpi" title="Total credits (AIU) for the selected period. Equals exact credits, plus estimated credits for requests without an exact value when 'Include estimated credits' is on.">
+  <div class="kpi" title="Total credits (AIU) for the selected period, from local logs only. Equals exact credits, plus estimated credits for requests without an exact value when 'Include estimated credits' is on. 'Likely real total' (when shown) applies your configured copilotCreditLens.otherUsageBufferPercent as a rough guess at your true GitHub account usage.">
     <div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div>
     <div id="kpiPeriodSub" class="kpi-sub"></div></div>
-  <div class="kpi" title="Credits used so far today (your local date).">
+  <div class="kpi" title="Credits used so far today (UTC date, matching GitHub's billing day).">
     <div class="kpi-label">Credits today</div><div id="kpiToday" class="kpi-value">0</div></div>
   <div class="kpi" title="Number of model requests counted in the selected period.">
     <div class="kpi-label">Requests</div><div id="kpiRequests" class="kpi-value">0</div></div>
@@ -76,9 +76,11 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
     <div class="kpi-label">Top model</div><div id="kpiModel" class="kpi-value small">—</div></div>
 </section>
 
+<p id="scopeNote" class="muted note scope-note"></p>
+
 <section class="card">
   <div class="card-head">
-    <h2 title="Credits per calendar day in the selected period. Bar height = credits that day.">Credits per day</h2>
+    <h2 title="Credits per UTC calendar day in the selected period (matching GitHub's billing day). Bar height = credits that day.">Credits per day</h2>
     <span class="legend">hover a bar for date &amp; exact credits</span>
   </div>
   <div id="daily" class="chart"></div>
@@ -217,6 +219,7 @@ select.mini { padding: 2px 6px; font-size: 11px; }
 .totals div { display: flex; flex-direction: column; gap: 2px; cursor: help; }
 .totals b { font-size: 16px; font-variant-numeric: tabular-nums; }
 .note { margin: 12px 0 0; font-size: 11px; }
+.scope-note { margin: -4px 0 16px; padding: 8px 12px; font-size: 11px; line-height: 1.5; background: rgba(196,109,16,.1); border: 1px solid rgba(196,109,16,.35); border-radius: 6px; color: var(--fg); }
 .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
 .foot { text-align: center; font-size: 11px; margin-top: 18px; }
 .tip { position: fixed; pointer-events: none; display: none; z-index: 50; max-width: 280px;
@@ -349,8 +352,16 @@ function render() {
   const breakdown = data.includeEstimated
     ? fmt(exactC) + ' exact + ' + fmt(fbC) + ' estimated'
     : (fbC > 0 ? fmt(exactC) + ' exact (+' + fmt(fbC) + ' if estimates on)' : 'all exact');
-  document.getElementById('kpiPeriodSub').textContent = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(periodCost) : breakdown;
+  let periodSub = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(periodCost) : breakdown;
+  if (data.otherUsageBufferPercent > 0) {
+    periodSub += ' · likely real total ≈ ' + fmt(data.kpis.estimatedAccountTotal);
+  }
+  document.getElementById('kpiPeriodSub').textContent = periodSub;
   document.getElementById('kpiToday').textContent = fmt(data.kpis.creditsToday);
+  const buffer = data.otherUsageBufferPercent || 0;
+  document.getElementById('scopeNote').textContent = buffer > 0
+    ? '⚠ Local-only figure. This dashboard only sees Copilot usage from this VS Code install (chat, agent debug logs, CLI) — it cannot see GitHub Coding Agent PRs, PR code review, or usage from other editors/devices, so it is a lower bound. With your configured ' + buffer + '% other-usage buffer, your likely real GitHub account total is ≈ ' + fmt(data.kpis.estimatedAccountTotal) + ' credits (vs. ' + fmt(data.kpis.creditsPeriod) + ' local). This is your own calibrated guess, not something derived from the logs — verify at github.com → Settings → Billing and licensing → Copilot usage, and adjust copilotCreditLens.otherUsageBufferPercent as needed.'
+    : '⚠ Local-only figure. This dashboard only sees Copilot usage from this VS Code install (chat, agent debug logs, CLI) — it cannot see GitHub Coding Agent PRs, PR code review, or usage from other editors/devices, so your real GitHub account total is typically higher. Compare against github.com → Settings → Billing and licensing → Copilot usage, then set copilotCreditLens.otherUsageBufferPercent to get a "likely real total" estimate here.';
   document.getElementById('kpiRequests').textContent = fmtInt(data.kpis.requests);
   document.getElementById('kpiModel').textContent = data.kpis.topModel;
 

@@ -91,19 +91,22 @@ interface Settings {
   backupDirectory: string;
   billingStartDate: string;
   usdPerCredit: number;
+  otherUsageBufferPercent: number;
 }
 
-/** GitHub usage-based billing started 2026-06-01; never count anything before it. */
-const BILLING_FLOOR_MS = new Date(2026, 5, 1).getTime();
+/** GitHub usage-based billing started 2026-06-01 at 00:00:00 UTC; never count
+ *  anything before it. Computed in UTC to match GitHub's reset instant. */
+const BILLING_FLOOR_MS = Date.UTC(2026, 5, 1);
 
-/** Parse the configured billing start date (YYYY-MM-DD, local), clamped so it can
- *  never be earlier than 2026-06-01. Invalid input falls back to the floor. */
+/** Parse the configured billing start date (YYYY-MM-DD, UTC midnight — matching
+ *  GitHub's UTC billing reset), clamped so it can never be earlier than
+ *  2026-06-01. Invalid input falls back to the floor. */
 function billingStartMsFrom(dateStr: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateStr || '').trim());
   if (m) {
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    if (!Number.isNaN(d.getTime())) {
-      return Math.max(d.getTime(), BILLING_FLOOR_MS);
+    const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (!Number.isNaN(ms)) {
+      return Math.max(ms, BILLING_FLOOR_MS);
     }
   }
   return BILLING_FLOOR_MS;
@@ -124,7 +127,8 @@ function readSettings(): Settings {
     additionalRoots: c.get<string[]>('additionalRoots', []),
     backupDirectory: c.get<string>('backupDirectory', ''),
     billingStartDate: c.get<string>('billingStartDate', '2026-06-01'),
-    usdPerCredit: c.get<number>('usdPerCredit', 0.01)
+    usdPerCredit: c.get<number>('usdPerCredit', 0.01),
+    otherUsageBufferPercent: c.get<number>('otherUsageBufferPercent', 0)
   };
 }
 
@@ -253,7 +257,8 @@ function computeData() {
     new Date(),
     ledger.workspaceNames,
     billingStartMsFrom(settings.billingStartDate),
-    settings.usdPerCredit
+    settings.usdPerCredit,
+    settings.otherUsageBufferPercent
   );
 }
 

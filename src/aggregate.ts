@@ -22,6 +22,10 @@ export interface DashboardData {
     creditsToday: number;
     requests: number;
     topModel: string;
+    /** creditsPeriod scaled by (1 + otherUsageBufferPercent/100) — a user-calibrated
+     *  guess at your real GitHub-wide total, since this extension only sees local
+     *  logs. Equals creditsPeriod when the buffer is 0 (the default). */
+    estimatedAccountTotal: number;
   };
   daily: { date: string; credits: number }[];
   byModel: Bucket[];
@@ -42,6 +46,10 @@ export interface DashboardData {
   unknownModels: string[];
   /** USD per AI Credit (GitHub usage-based billing: 1 credit = $0.01). Configurable. */
   usdPerCredit: number;
+  /** User-calibrated percent added to creditsPeriod to approximate GitHub-side
+   *  usage this extension cannot observe locally (Coding Agent, PR code review,
+   *  other editors/devices). 0 by default — never invented automatically. */
+  otherUsageBufferPercent: number;
   periods: { id: PeriodId; label: string }[];
 }
 
@@ -65,7 +73,9 @@ const SOURCE_LABELS: Record<string, string> = {
 function naturalStart(period: PeriodId, markers: readonly ResetMarker[], now: Date): number | null {
   switch (period) {
     case 'currentMonth':
-      return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      // GitHub resets Copilot allowances at 00:00:00 UTC on the 1st, so the
+      // boundary must be computed in UTC — not the local calendar month.
+      return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
     case 'last3Months':
       return now.getTime() - 90 * DAY_MS;
     case 'last6Months':
@@ -127,7 +137,8 @@ export function aggregate(
   now: Date = new Date(),
   workspaceNames: Record<string, string> = {},
   billingStartMs: number | null = null,
-  usdPerCredit = 0
+  usdPerCredit = 0,
+  otherUsageBufferPercent = 0
 ): DashboardData {
   const scoped = filterByPeriod(entries, period, markers, now, billingStartMs);
   const value = (e: UsageEntry): number =>
@@ -187,7 +198,8 @@ export function aggregate(
       creditsPeriod: round4(creditsPeriod),
       creditsToday: round4(creditsToday),
       requests: scoped.length,
-      topModel: byModel.length ? byModel[0].label : '—'
+      topModel: byModel.length ? byModel[0].label : '—',
+      estimatedAccountTotal: round4(creditsPeriod * (1 + otherUsageBufferPercent / 100))
     },
     daily: [...dayCredits.entries()]
       .map(([date, credits]) => ({ date, credits: round4(credits) }))
@@ -205,6 +217,7 @@ export function aggregate(
     estimatedRequestCount,
     unknownModels,
     usdPerCredit,
+    otherUsageBufferPercent,
     periods: PERIODS
   };
 }
@@ -242,11 +255,11 @@ function latestMarker(markers: readonly ResetMarker[]): ResetMarker | undefined 
   return [...markers].sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
 }
 
-/** Local-time YYYY-MM-DD key. */
+/** UTC YYYY-MM-DD key, matching the UTC day GitHub uses for billing. */
 function dateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
