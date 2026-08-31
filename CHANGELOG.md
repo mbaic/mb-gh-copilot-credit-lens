@@ -5,6 +5,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Extension icon**: added a marketplace/Extensions-view icon (`.images/icon.png`,
+  wired via `package.json`'s `icon` field) — a lens over a usage gauge and bar
+  chart, an original design with no GitHub/Copilot/VS Code marks or brand colors.
+
+## [1.0.19] - 2026-08-31
+
 ### Fixed
 - **Token totals section crash**: "Est. cost (USD)" and its note referenced a
   variable removed while adding the "≈ Assumed" headline in 1.0.18, throwing

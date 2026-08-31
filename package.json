@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "publisher": "MBS",
   "license": "MIT",
+  "icon": ".images/icon.png",
   "engines": {
     "vscode": "^1.90.0",
     "node": ">=18"
