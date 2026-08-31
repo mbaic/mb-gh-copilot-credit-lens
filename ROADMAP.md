@@ -9,7 +9,12 @@ expected value; nothing here is a commitment to a date.
 - **Manual entry / cloud-agent reconciliation.** A command to record credits read
   from the GitHub.com billing page (e.g. server-side coding-agent runs that leave
   no local log), stored with `source: "manual"` and clearly badged. *Adds one
-  source path and one command; no change to existing parsers.*
+  source path and one command; no change to existing parsers.* A first,
+  coarser pass at this shipped as `otherUsageBufferPercent`: a user-calibrated
+  percentage applied to the whole period total rather than per-event manual
+  entries — good enough to see a realistic headline number, but it can't
+  attribute the gap to a specific day, model, or workspace the way real
+  reconciled entries would.
 - **Activity-bar view.** A sidebar container with a compact summary that opens the
   full dashboard panel, for one-click discoverability.
 - **Configurable credit budget + threshold notification.** Warn when the current

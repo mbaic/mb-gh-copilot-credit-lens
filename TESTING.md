@@ -52,6 +52,7 @@ then **restart VS Code**.
 
   "copilotCreditLens.billingStartDate": "2026-06-01", // floor; nothing earlier is counted
   "copilotCreditLens.usdPerCredit": 0.01,          // 1 AI Credit = $0.01 (set 0 to hide cost)
+  "copilotCreditLens.otherUsageBufferPercent": 17.5, // "≈ Assumed" headline buffer; 0 = local-only number
 
   "copilotCreditLens.additionalRoots": [],         // add other VS Code profiles/Insiders "User" folders
   "copilotCreditLens.backupDirectory": ""          // set a folder to auto-backup the ledger
@@ -120,6 +121,7 @@ by-model breakdown should match.
 - [ ] **Top 5 / Top 10 / All** on *By model* and *By workspace* changes how many rows show.
 - [ ] **By workspace** shows readable project names (run **Rebuild Workspace Names** if any show as a hash).
 - [ ] **Est. cost (USD)** ≈ credits × $0.01.
+- [ ] **`otherUsageBufferPercent`** (default `17.5`): `Credits this period` headline shows the buffered total with an `≈ Assumed` badge, verified local total moves to the sub-line; set it to `0` and the headline reverts to the plain local total with no badge.
 - [ ] **Export Usage to CSV** and **Export Data Backup (JSON)** produce files.
 - [ ] PowerShell verifier totals match the dashboard.
 
@@ -132,8 +134,12 @@ by-model breakdown should match.
   - `N file(s), 0 new entries` → run **Clear All Data** then **Sync Now**.
 - **Webview errors:** Command Palette → **Developer: Open Webview Developer Tools** → Console tab; copy any red errors.
 - **Numbers differ from the GitHub billing page:** the dashboard counts only what's
-  in local logs from `billingStartDate`; cloud (server-side) agent runs aren't tracked,
-  and cost is **gross** of your plan's included monthly allowance.
+  in local logs from `billingStartDate`; cloud (server-side) agent runs, PR code
+  review, and other editors/devices aren't tracked, and cost is **gross** of your
+  plan's included monthly allowance. Compare the dashboard's total against
+  github.com → Settings → Billing and licensing → Copilot usage for one period,
+  then set `otherUsageBufferPercent` to the percentage that closes the gap — the
+  KPI will then show that calibrated total as the headline, tagged `≈ Assumed`.
 
 When reporting, please include: the **Output channel** text, your VS Code version,
 and (if relevant) the **PowerShell verifier** output.

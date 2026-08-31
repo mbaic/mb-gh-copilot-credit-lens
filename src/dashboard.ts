@@ -65,8 +65,8 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </section>
 
 <section class="kpis">
-  <div class="kpi" title="Total credits (AIU) for the selected period, from local logs only. Equals exact credits, plus estimated credits for requests without an exact value when 'Include estimated credits' is on. 'Likely real total' (when shown) applies your configured copilotCreditLens.otherUsageBufferPercent as a rough guess at your true GitHub account usage.">
-    <div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div>
+  <div class="kpi" title="Total credits for the selected period. With copilotCreditLens.otherUsageBufferPercent set above 0, the headline number is your calibrated 'likely real GitHub total' (local total × (1 + buffer%)) — tagged '≈ Assumed' since it's your own estimate, never a measured value. The verified local-only figure (exact + estimated) moves to the line below. With the buffer at 0, the headline is the verified local total.">
+    <div class="kpi-label">Credits this period <span id="kpiPeriodBadge" class="badge" hidden>≈ Assumed</span></div><div id="kpiPeriod" class="kpi-value">0</div>
     <div id="kpiPeriodSub" class="kpi-sub"></div></div>
   <div class="kpi" title="Credits used so far today (UTC date, matching GitHub's billing day).">
     <div class="kpi-label">Credits today</div><div id="kpiToday" class="kpi-value">0</div></div>
@@ -189,7 +189,8 @@ select.mini { padding: 2px 6px; font-size: 11px; }
 .spacer { flex: 1; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; cursor: help; }
-.kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.badge { font-size: 9.5px; font-weight: 700; letter-spacing: .03em; padding: 1px 6px; border-radius: 999px; background: rgba(196,154,16,.15); color: #c49a10; border: 1px solid #c49a10; text-transform: uppercase; }
 .kpi-value { font-size: 24px; font-weight: 600; }
 .kpi-value.small { font-size: 15px; word-break: break-word; }
 .kpi-sub { font-size: 10px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
@@ -345,22 +346,35 @@ function render() {
   trust.textContent = { exact: 'Exact', mixed: 'Mixed', estimated: 'Estimated', none: 'No data' }[data.trust] || '—';
 
   document.getElementById('lastSync').textContent = data.lastScanAt ? 'Synced ' + new Date(data.lastScanAt).toLocaleString() : 'Not synced yet';
-  document.getElementById('kpiPeriod').textContent = fmt(data.kpis.creditsPeriod);
+
   const exactC = data.totals.exactCredits, fbC = data.totals.fallbackCredits;
   const rate = data.usdPerCredit || 0;
-  const periodCost = data.kpis.creditsPeriod * rate;
+  const buffer = data.otherUsageBufferPercent || 0;
   const breakdown = data.includeEstimated
     ? fmt(exactC) + ' exact + ' + fmt(fbC) + ' estimated'
     : (fbC > 0 ? fmt(exactC) + ' exact (+' + fmt(fbC) + ' if estimates on)' : 'all exact');
-  let periodSub = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(periodCost) : breakdown;
-  if (data.otherUsageBufferPercent > 0) {
-    periodSub += ' · likely real total ≈ ' + fmt(data.kpis.estimatedAccountTotal);
+
+  // Headline: with a buffer set, the calibrated "likely real total" leads and is
+  // tagged "≈ Assumed"; the verified local-only figure moves to the sub-line.
+  // With no buffer, the headline is the verified local total (unchanged behavior).
+  const headline = buffer > 0 ? data.kpis.estimatedAccountTotal : data.kpis.creditsPeriod;
+  const headlineCost = headline * rate;
+  document.getElementById('kpiPeriod').textContent = fmt(headline);
+  document.getElementById('kpiPeriodBadge').hidden = buffer <= 0;
+
+  let periodSub;
+  if (buffer > 0) {
+    periodSub = 'local only: ' + fmt(data.kpis.creditsPeriod) + ' (' + breakdown + ')' + ' · + your ' + buffer + '% buffer';
+    if (rate > 0) {
+      periodSub += ' · ≈ ' + fmtUsd(headlineCost);
+    }
+  } else {
+    periodSub = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(headlineCost) : breakdown;
   }
   document.getElementById('kpiPeriodSub').textContent = periodSub;
   document.getElementById('kpiToday').textContent = fmt(data.kpis.creditsToday);
-  const buffer = data.otherUsageBufferPercent || 0;
   document.getElementById('scopeNote').textContent = buffer > 0
-    ? '⚠ Local-only figure. This dashboard only sees Copilot usage from this VS Code install (chat, agent debug logs, CLI) — it cannot see GitHub Coding Agent PRs, PR code review, or usage from other editors/devices, so it is a lower bound. With your configured ' + buffer + '% other-usage buffer, your likely real GitHub account total is ≈ ' + fmt(data.kpis.estimatedAccountTotal) + ' credits (vs. ' + fmt(data.kpis.creditsPeriod) + ' local). This is your own calibrated guess, not something derived from the logs — verify at github.com → Settings → Billing and licensing → Copilot usage, and adjust copilotCreditLens.otherUsageBufferPercent as needed.'
+    ? '≈ Assumed, not billed. ' + fmt(headline) + ' = your local total (' + fmt(data.kpis.creditsPeriod) + ') × your own ' + buffer + '% buffer, calibrated against github.com → Settings → Billing and licensing → Copilot usage. This dashboard only reads local VS Code/CLI logs — it cannot see GitHub Coding Agent PRs, PR code review, or usage from other editors/devices, so treat this as an approximation, not a bill. Set copilotCreditLens.otherUsageBufferPercent to 0 to show the verified local number only.'
     : '⚠ Local-only figure. This dashboard only sees Copilot usage from this VS Code install (chat, agent debug logs, CLI) — it cannot see GitHub Coding Agent PRs, PR code review, or usage from other editors/devices, so your real GitHub account total is typically higher. Compare against github.com → Settings → Billing and licensing → Copilot usage, then set copilotCreditLens.otherUsageBufferPercent to get a "likely real total" estimate here.';
   document.getElementById('kpiRequests').textContent = fmtInt(data.kpis.requests);
   document.getElementById('kpiModel').textContent = data.kpis.topModel;

@@ -90,8 +90,35 @@ All under `copilotCreditLens.*`:
 | `backupDirectory` | `""` | Folder for automatic ledger backups (empty = off) |
 | `billingStartDate` | `"2026-06-01"` | Earliest date counted in any period (min/floor `2026-06-01`) |
 | `usdPerCredit` | `0.01` | USD per AI Credit for cost estimates (`0` hides cost) |
+| `otherUsageBufferPercent` | `17.5` | Percent added on top of the local total to approximate GitHub-side usage this extension can't see (`0` = show only the local total) — see below |
 
 Multiple profiles? Point `additionalRoots` at the other profile's folder that contains `workspaceStorage`.
+
+## Scope: local-only totals, and the "≈ Assumed" buffer
+
+This extension only reads Copilot logs that exist **on this machine** (VS Code
+Chat/agent-debug logs, Copilot CLI). It has no network access and cannot see:
+
+- **GitHub Copilot Coding Agent** sessions — these run entirely on GitHub's
+  infrastructure, even when triggered from VS Code.
+- **PR code review** requested on github.com, mobile, or `gh pr create --reviewer @copilot`.
+- Copilot usage from **other editors, other devices, or github.com chat directly**.
+
+So the local total is a structural *lower bound* on your real GitHub account
+usage — never the full story. `otherUsageBufferPercent` lets you close that
+gap with your own calibrated guess: compare the dashboard's total for a
+period against your official usage at **github.com → Settings → Billing and
+licensing → Copilot usage**, then set the percentage that closes the gap.
+
+When the buffer is above `0`, the **Credits this period** KPI shows that
+calibrated total as the headline number, tagged **`≈ Assumed`** so it's never
+mistaken for a billed figure — the verified local-only total and the exact
+math move to the line below it, and an always-visible note explains the
+scope. The shipped default (`17.5`) reflects one observed gap for one
+billing period on one account — it is **not** a universal constant. Recalibrate
+it for your own usage mix, and expect it to drift over time as your split
+between Coding Agent, PR review, and local chat/agent-mode usage changes.
+Set it to `0` any time to see only the verified local number.
 
 ## Billing period & cost
 

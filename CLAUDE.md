@@ -55,7 +55,13 @@ When changing code, preserve all of these:
    tolerate missing ones, and never let one bad line/file abort a scan.
 5. **Honest credits.** Exact billing values (`copilotUsageNanoAiu / 1e9`) are
    used as-is; estimates are always flagged and excluded from totals unless the
-   user opts in. Keep the exact/estimated/trust distinction intact.
+   user opts in. Keep the exact/estimated/trust distinction intact. The extension
+   only reads local logs, so its totals are a structural lower bound on real
+   GitHub account usage (Coding Agent, PR code review, other editors/devices
+   aren't visible locally) — never silently correct for this. The one exception,
+   `otherUsageBufferPercent`, is explicit: a user-calibrated percent that scales
+   the headline KPI to approximate the real total, always tagged `≈ Assumed` in
+   the UI so it's never mistaken for a measured or billed value.
 6. **`npm audit` must pass** at `--audit-level=moderate` (0 vulnerabilities).
 7. **Webview safety:** strict CSP, a per-load script nonce, no remote resources,
    and `textContent` for any log-derived string.
@@ -81,7 +87,9 @@ run `parseFile` → `LedgerStore` → `aggregate` → `toCsv` and assert), then
 `defaultPeriod` · `includeEstimated` · `includeChatSessions` ·
 `includeDebugLogs` · `includeCliSessions` · `additionalRoots` · `backupDirectory` ·
 `billingStartDate` (floor 2026-06-01; clamps all periods) · `usdPerCredit`
-(cost = credits × rate; 1 AI Credit = $0.01).
+(cost = credits × rate; 1 AI Credit = $0.01) · `otherUsageBufferPercent`
+(default 17.5; user-calibrated guess at non-local GitHub usage — see README's
+"Scope: local-only totals" section).
 
 Adding a setting touches two places: `package.json` (`contributes.configuration`)
 and `readSettings()` in `extension.ts` (plus the consumer that uses it).

@@ -3,6 +3,29 @@
 All notable changes to **GitHub Copilot Credit Lens** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **UTC billing boundaries**: the current-month period start, the
+  `2026-06-01` billing floor, the configurable `billingStartDate`, and the
+  daily-chart/"today" bucketing now compute in UTC instead of local time,
+  matching GitHub's `00:00:00 UTC` reset. Entries near a month or day
+  boundary could previously land in the wrong bucket depending on your
+  timezone.
+
+### Added
+- **`otherUsageBufferPercent` setting** (default `17.5`) and a redesigned
+  **Credits this period** KPI. This extension only reads local VS Code/CLI
+  logs, so its totals are a structural lower bound on your real GitHub
+  account usage — GitHub Coding Agent PRs, PR code review, and usage from
+  other editors/devices aren't visible locally. When the buffer is set above
+  `0`, the KPI's headline number becomes your calibrated "likely real total",
+  tagged **`≈ Assumed`** so it's never mistaken for a billed figure; the
+  verified local-only total and the exact math move to the line below. An
+  always-visible scope note explains the limitation and how to (re)calibrate
+  the buffer against your own github.com usage page. Set the buffer to `0`
+  to show only the verified local total, as before.
+
 ## [1.0.0] - 2026-08-19
 
 Initial 1.0.0 release.

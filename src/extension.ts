@@ -128,7 +128,7 @@ function readSettings(): Settings {
     backupDirectory: c.get<string>('backupDirectory', ''),
     billingStartDate: c.get<string>('billingStartDate', '2026-06-01'),
     usdPerCredit: c.get<number>('usdPerCredit', 0.01),
-    otherUsageBufferPercent: c.get<number>('otherUsageBufferPercent', 0)
+    otherUsageBufferPercent: c.get<number>('otherUsageBufferPercent', 17.5)
   };
 }
 
