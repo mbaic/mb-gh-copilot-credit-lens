@@ -6,6 +6,32 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Token totals section crash**: "Est. cost (USD)" and its note referenced a
+  variable removed while adding the "≈ Assumed" headline in 1.0.18, throwing
+  inside `render()` and silently leaving the cost box and all three notes
+  below it (`estNote`/`costNote`/`modelNote`) stuck on their initial empty
+  state. Token totals now always computes cost from the verified local total,
+  independent of any buffer applied to the KPI headline.
+- **Ambiguous "Credits this period" wording**: the Token totals section's
+  reconciliation text and tooltips referenced the "Credits this period" KPI
+  by name to describe the exact+estimated sum — accurate before 1.0.18, but
+  that KPI can now show the buffered "≈ Assumed" total instead. Reworded to
+  say "your local total" / "your verified local total" so the section reads
+  correctly regardless of the buffer setting.
+
+### Changed
+- **"≈ Assumed" headline now rounds to whole credits** (e.g. `≈ 8,409`)
+  instead of showing 4 decimals on a figure that is explicitly an estimate,
+  and is tinted to visually match its badge. The verified local sub-line
+  keeps full precision.
+- **By model / By source / By workspace / Token totals** are now tagged
+  **Local only**, and the scope-note banner is trimmed to focus on why the
+  headline won't match these sections' totals, instead of repeating the math
+  already shown in the KPI's sub-line.
+
+## [1.0.18] - 2026-08-31
+
+### Fixed
 - **UTC billing boundaries**: the current-month period start, the
   `2026-06-01` billing floor, the configurable `billingStartDate`, and the
   daily-chart/"today" bucketing now compute in UTC instead of local time,
