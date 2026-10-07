@@ -1,0 +1,123 @@
+# CLAUDE.md
+
+Guidance for working in this repository.
+
+## What this is
+
+**GitHub Copilot Credit Lens** — a VS Code extension (publisher `MBS`) that reads
+the GitHub Copilot session logs already on disk and presents local credit/token
+analytics. It is intentionally minimal, offline-first, zero-dependency, and
+security-conscious. Distribution is local `.vsix` only; never the Marketplace.
+
+## Architecture
+
+Small, single-purpose modules with a deliberate split (UI vs. logic vs. I/O):
+
+- **`src/types.ts`** — shared data model (`UsageEntry`, `Ledger`, `PeriodId`,
+  `ParseResult`) and `SCHEMA_VERSION`. Pure data, no imports of VS Code or `fs`.
+- **`src/rates.ts`** — the *only* place model→credit multipliers live. Used for
+  **estimation** when a record has no exact billing value. `normalizeModel()`
+  matches the longest known model-family prefix.
+- **`src/paths.ts`** — all platform-specific path logic and file discovery
+  (`discoverChatFiles` / `discoverDebugFiles` / `discoverCliFiles`) plus workspace
+  name resolution. Missing folders return empty, never throw.
+- **`src/parsers.ts`** — `parseFile(file, fromCursor)` dispatches by source:
+  debug logs are read incrementally (appended tail only); chat sessions (`.json`
+  or the JSONL mutation log, replayed) and CLI `events.jsonl` (`session.shutdown`
+  / `session.usage_checkpoint`) are re-read as snapshots when their mtime/size
+  changes. Tolerates malformed/unknown lines; normalizes into `UsageEntry`.
+- **`src/ledger.ts`** — `LedgerStore`: atomic, backup-protected JSON persistence
+  in `globalStorageUri`; per-file cursors; append (debug) or upsert-by-id
+  (snapshot sources); schema migration in `normalize()`.
+- **`src/scanner.ts`** — `runScan(ledger, config)` ties discovery + parsing +
+  ledger together. Adding a source touches only paths/parsers/scanner.
+- **`src/aggregate.ts`** — pure period filtering and aggregation into
+  `DashboardData` (KPIs, daily series, by-model/source/workspace, trust chip).
+  `resolveOverlaps()` removes cross-source double counting on read: per chat
+  turn window, the larger of the turn's billed total and its debug-log calls
+  counts (debug rows kept, any chat surplus added as a request-less top-up); a
+  CLI session with a debug log is dropped. Per-source figures are logged to the
+  Output channel after each scan.
+- **`src/csv.ts`** — `toCsv(entries)`, RFC-4180-style escaping.
+- **`src/dashboard.ts`** — the webview: HTML shell + inline CSS + a nonce'd inline
+  script that renders hand-built HTML/CSS charts (daily bars with value labels +
+  hover tooltip, by-model/source `credits (requests)` bars, workspace table),
+  client-side Top 5/10/All filters, a reconciling credits footer, and tooltips
+  throughout. All dynamic text uses `textContent` (never `innerHTML`). Defines the
+  typed extension↔webview messages.
+- **`src/extension.ts`** — VS Code integration only: activation, settings,
+  commands, status bar, file watcher, and the webview panel lifecycle.
+
+## Non-negotiable invariants
+
+When changing code, preserve all of these:
+
+1. **No network calls, no `child_process`, no `eval`.** Only local file reads via
+   `fs/promises`. (`crypto` for hashing/nonce is fine — local computation.)
+2. **Zero runtime dependencies.** Dev dependencies are version-pinned exactly
+   (no `^`/`~`). Do not add a runtime dependency without strong justification.
+3. **Read-only on Copilot's files.** The extension never writes to any discovered
+   log file — it only writes its own ledger/CSV to chosen locations.
+4. **Resilient parsing.** Treat log schemas as evolving: ignore unknown fields,
+   tolerate missing ones, and never let one bad line/file abort a scan.
+5. **Honest credits.** Exact billing values (chat-session `copilotCredits`,
+   debug-log/CLI `copilotUsageNanoAiu`/`totalNanoAiu` / 1e9) are used as-is;
+   estimates are always flagged and excluded from totals unless the user opts
+   in. Keep the exact/estimated/trust distinction intact. The extension only
+   reads local files, so its totals are a structural lower bound on real GitHub
+   account usage (Coding Agent, PR code review, other machines/editors aren't
+   visible locally) — never silently correct or scale for this.
+6. **`npm audit` must pass** at `--audit-level=moderate` (0 vulnerabilities).
+7. **Webview safety:** strict CSP, a per-load script nonce, no remote resources,
+   and `textContent` for any log-derived string.
+
+## Commands
+
+```bash
+npm ci                       # clean install from lockfile
+npm run compile              # tsc -> out/  (strict mode; must be warning-free)
+npm run build:cli            # assemble extension/credit-lens/core/ from out/
+npm audit --audit-level=moderate
+npx @vscode/vsce package     # produce mb-gh-copilot-credit-lens-<version>.vsix
+```
+
+There is no formal unit-test runner. Validate logic changes with a quick Node
+smoke test against the compiled `out/*.js` (craft synthetic JSONL in a temp dir,
+run `parseFile` → `LedgerStore` → `aggregate` → `toCsv` and assert), then
+`npm run compile` and `npm audit`. Press **F5** for the Extension Development Host.
+
+## Settings (all under `copilotCreditLens.*`)
+
+`statusBarEnabled` · `defaultPeriod` · `additionalRoots` · `backupDirectory` ·
+`usdPerCredit` (cost = credits × rate; 1 AI Credit = $0.01). All sources are
+always scanned and watched; the 2026-06-01 billing floor is fixed.
+
+Adding a setting touches two places: `package.json` (`contributes.configuration`)
+and `readSettings()` in `extension.ts` (plus the consumer that uses it).
+
+## Release
+
+Every push to `main` auto-publishes a release via `.github/workflows/release.yml`:
+the version is `v<major>.<minor>.<run_number>` (major.minor from `package.json`,
+patch = workflow run number), so each commit ships a unique, increasing version
+with no manual bump or commit-back. A `vX.Y.Z` tag releases that exact version;
+manual `workflow_dispatch` behaves like a `main` push.
+
+CI pipeline: audit → version stamp → compile → `build:cli` → package → GitHub
+Release with **all three artifacts** attached:
+
+1. `mb-gh-copilot-credit-lens-<v>.vsix` — VS Code extension
+2. `mb-gh-copilot-credit-lens-<v>.tgz` — standalone `ccl` CLI (`npm i -g`)
+3. `copilot-cli-extension-credit-lens-<v>.zip` — Copilot CLI `/credits` extension
+
+To open a new minor/major line, bump `major.minor` in `package.json` and add a
+`CHANGELOG.md` entry. v1.0.x is the first line.
+
+Develop on the designated feature branch, then merge to `main`.
+
+## Third-party / IP
+
+This extension bundles no third-party code — **zero runtime dependencies**. All
+code, CSS, and docs are original work under MIT (© Milos Baic). Keep it that way:
+prefer original implementations over copying snippets, and never redistribute
+third-party assets. Model multipliers in `rates.ts` are factual pricing data.

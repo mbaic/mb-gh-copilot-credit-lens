@@ -1,0 +1,152 @@
+{
+  "name": "mb-gh-copilot-credit-lens",
+  "displayName": "GitHub Copilot Credit Lens",
+  "description": "Local-first GitHub Copilot credit & token usage tracker for VS Code. Reads local session logs, keeps its own ledger, and shows analytics. No API. No telemetry. Fully offline.",
+  "version": "1.1.2",
+  "publisher": "MBS",
+  "license": "MIT",
+  "icon": ".images/icon.png",
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=18"
+  },
+  "bin": {
+    "copilot-credit-lens": "./out/cli.js",
+    "ccl": "./out/cli.js"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "copilot",
+    "credits",
+    "tokens",
+    "usage",
+    "analytics",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mbaic/mb-gh-copilot-credit-lens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mbaic/mb-gh-copilot-credit-lens/issues"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copilotCreditLens.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.syncNow",
+        "title": "Sync Now",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.resetPeriod",
+        "title": "Reset Period (add marker)",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.exportCsv",
+        "title": "Export Usage to CSV",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.exportBackup",
+        "title": "Export Data Backup (JSON)",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.clearLedger",
+        "title": "Clear All Data",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.enableDebugLogging",
+        "title": "Enable Copilot Agent Debug Logging",
+        "category": "Copilot Credit Lens"
+      },
+      {
+        "command": "copilotCreditLens.rebuildWorkspaceNames",
+        "title": "Rebuild Workspace Names",
+        "category": "Copilot Credit Lens"
+      }
+    ],
+    "configuration": {
+      "title": "GitHub Copilot Credit Lens",
+      "properties": {
+        "copilotCreditLens.statusBarEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a compact credit total for the current period in the status bar."
+        },
+        "copilotCreditLens.defaultPeriod": {
+          "type": "string",
+          "enum": [
+            "currentMonth",
+            "last3Months",
+            "last6Months",
+            "last9Months",
+            "last12Months",
+            "sinceReset",
+            "allTime"
+          ],
+          "enumDescriptions": [
+            "First day of the current month through today.",
+            "Rolling last 90 days.",
+            "Rolling last 180 days.",
+            "Rolling last 270 days.",
+            "Rolling last 365 days.",
+            "From the most recent reset marker through today.",
+            "Every entry in the ledger."
+          ],
+          "default": "currentMonth",
+          "description": "Period the dashboard selects on open."
+        },
+        "copilotCreditLens.additionalRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra VS Code 'User' storage roots to scan (e.g. other profiles or Insiders). Point at the folder that contains 'workspaceStorage'."
+        },
+        "copilotCreditLens.backupDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Optional folder. When set, a full copy of the ledger (copilot-credit-lens-backup.json) is written here automatically after any sync that imports new data. Leave empty to disable auto-backup.",
+          "markdownDescription": "Optional folder for **automatic backups**. When set, a full copy of the ledger (`copilot-credit-lens-backup.json`) is written here after any sync that imports new data — a durable copy outside VS Code's global storage. Leave empty to disable. Manual backups are always available via the **Export Data Backup (JSON)** command."
+        },
+        "copilotCreditLens.usdPerCredit": {
+          "type": "number",
+          "default": 0.01,
+          "minimum": 0,
+          "description": "USD value of one AI Credit, used for the estimated cost figures. GitHub usage-based billing (from 2026-06-01) prices 1 AI Credit at $0.01. Adjust for currency or plan changes. Cost is gross and does not subtract your plan's included monthly allowance.",
+          "markdownDescription": "USD value of one **AI Credit**, used for the estimated cost shown on the dashboard. GitHub usage-based billing (from 2026-06-01) prices **1 AI Credit = $0.01**. Adjust for currency/plan changes. The estimated cost is **gross** — it does not subtract your plan's included monthly credit allowance. Set to `0` to hide cost figures."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "audit": "npm audit --audit-level=moderate",
+    "build:cli": "node scripts/build-cli.mjs",
+    "build:all": "npm run compile && npm run build:cli",
+    "install:extension": "node scripts/install-extension.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.0",
+    "@types/vscode": "1.90.0",
+    "typescript": "5.4.5"
+  }
+}

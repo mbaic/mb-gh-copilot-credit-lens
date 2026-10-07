@@ -1,0 +1,401 @@
+// VS Code integration only. All rendering, parsing, aggregation and storage
+// live in their own modules; this file wires them to commands, the status bar,
+// a file watcher and the dashboard webview panel.
+
+import * as vscode from 'vscode';
+import * as crypto from 'crypto';
+import * as path from 'path';
+import * as fsp from 'fs/promises';
+import { LedgerStore } from './ledger';
+import { runScan, ScanConfig } from './scanner';
+import { aggregate, filterByPeriod, overlapStats, periodStart, PERIODS } from './aggregate';
+import { buildDashboardHtml, WebviewMessage } from './dashboard';
+import { toCsv } from './csv';
+import { cliSessionRoot, defaultUserRoots, resolveWorkspaceNameForHash } from './paths';
+import { PeriodId } from './types';
+
+const VIEW_TYPE = 'copilotCreditLens.dashboard';
+const DEBUG_SETTING = 'github.copilot.chat.agentDebugLog.fileLogging.enabled';
+
+let ledger: LedgerStore;
+let panel: vscode.WebviewPanel | undefined;
+let statusBar: vscode.StatusBarItem;
+let log: vscode.OutputChannel;
+let watchTimer: NodeJS.Timeout | undefined;
+let scanning = false;
+
+// Dashboard view state (independent of stored defaults once the user changes it).
+let period: PeriodId = 'currentMonth';
+let includeEstimated = false;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  log = vscode.window.createOutputChannel('Copilot Credit Lens');
+  context.subscriptions.push(log);
+
+  ledger = new LedgerStore(context.globalStorageUri.fsPath);
+  await ledger.load();
+
+  const settings = readSettings();
+  period = settings.defaultPeriod;
+
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBar.command = 'copilotCreditLens.openDashboard';
+  context.subscriptions.push(statusBar);
+  updateStatusBar();
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('copilotCreditLens.openDashboard', () => openDashboard(context)),
+    vscode.commands.registerCommand('copilotCreditLens.syncNow', () => syncNow(true)),
+    vscode.commands.registerCommand('copilotCreditLens.resetPeriod', resetPeriodCmd),
+    vscode.commands.registerCommand('copilotCreditLens.exportCsv', exportCsvCmd),
+    vscode.commands.registerCommand('copilotCreditLens.exportBackup', exportBackupCmd),
+    vscode.commands.registerCommand('copilotCreditLens.clearLedger', clearLedgerCmd),
+    vscode.commands.registerCommand('copilotCreditLens.enableDebugLogging', enableDebugLoggingCmd),
+    vscode.commands.registerCommand('copilotCreditLens.rebuildWorkspaceNames', rebuildWorkspaceNamesCmd)
+  );
+
+  setupWatchers(context, settings);
+  void syncNow(false);
+}
+
+export function deactivate(): void {
+  if (watchTimer) {
+    clearTimeout(watchTimer);
+  }
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+interface Settings {
+  statusBarEnabled: boolean;
+  defaultPeriod: PeriodId;
+  additionalRoots: string[];
+  backupDirectory: string;
+  usdPerCredit: number;
+}
+
+/** GitHub usage-based billing started 2026-06-01 at 00:00:00 UTC; never count
+ *  anything before it. Computed in UTC to match GitHub's reset instant. */
+const BILLING_START_MS = Date.UTC(2026, 5, 1);
+
+function readSettings(): Settings {
+  const c = vscode.workspace.getConfiguration('copilotCreditLens');
+  return {
+    statusBarEnabled: c.get('statusBarEnabled', true),
+    defaultPeriod: c.get<PeriodId>('defaultPeriod', 'currentMonth'),
+    additionalRoots: c.get<string[]>('additionalRoots', []),
+    backupDirectory: c.get<string>('backupDirectory', ''),
+    usdPerCredit: c.get<number>('usdPerCredit', 0.01)
+  };
+}
+
+function scanConfig(settings: Settings): ScanConfig {
+  return { roots: [...defaultUserRoots(), ...settings.additionalRoots] };
+}
+
+// ── Scanning ──────────────────────────────────────────────────────────────────
+
+async function syncNow(foreground: boolean): Promise<void> {
+  if (scanning) {
+    return;
+  }
+  scanning = true;
+  postSyncStatus(true);
+  const settings = readSettings();
+  try {
+    const run = () => runScan(ledger, scanConfig(settings));
+    const result = foreground
+      ? await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Copilot Credit Lens: scanning logs…' },
+          run
+        )
+      : await run();
+
+    log.appendLine(
+      `Scan complete: ${result.filesScanned} file(s), ${result.added} new entr${result.added === 1 ? 'y' : 'ies'}.`
+    );
+    logBreakdown(result.filesBySource);
+    if (result.warnings.length) {
+      log.appendLine(`  ${result.warnings.length} warning(s):`);
+      result.warnings.slice(0, 20).forEach((w) => log.appendLine(`    - ${w}`));
+    }
+    if (settings.backupDirectory && result.added > 0) {
+      await autoBackup(settings.backupDirectory);
+    }
+    if (foreground) {
+      vscode.window.showInformationMessage(`Copilot Credit Lens: imported ${result.added} new usage entr${result.added === 1 ? 'y' : 'ies'}.`);
+    }
+  } catch (err) {
+    log.appendLine(`Scan failed: ${message(err)}`);
+    if (foreground) {
+      vscode.window.showErrorMessage(`Copilot Credit Lens: scan failed — ${message(err)}`);
+    }
+  } finally {
+    scanning = false;
+    postSyncStatus(false);
+    refresh();
+  }
+}
+
+/** Write where the current period's credits come from to the Output channel,
+ *  so a gap against Copilot's "Credits Used" can be traced to a source. */
+function logBreakdown(filesBySource: Record<string, number>): void {
+  const start = periodStart('currentMonth', [], new Date(), BILLING_START_MS) ?? BILLING_START_MS;
+  const s = overlapStats(ledger.entries, start);
+  const f = (n: number) => n.toFixed(3);
+  const raw = (src: string) => s.raw[src] ?? { credits: 0, requests: 0 };
+  log.appendLine(`  Files found: chat ${filesBySource.chat ?? 0}, debug ${filesBySource.debug ?? 0}, cli ${filesBySource.cli ?? 0}`);
+  log.appendLine('  Current period, exact credits per source before de-duplication:');
+  log.appendLine(`    chat sessions ${f(raw('chat').credits)} (${raw('chat').requests} turns) | debug logs ${f(raw('debug').credits)} (${raw('debug').requests} calls) | cli ${f(raw('cli').credits)}`);
+  log.appendLine(`  Chat turns also in debug logs: ${s.coveredTurns} — chat ${f(s.coveredChatCredits)} vs debug ${f(s.coveredDebugCredits)}; top-up where chat was higher: ${f(s.topUpCredits)}`);
+  log.appendLine(`  Chat turns with no debug log (counted from chat): ${s.chatOnlyTurns} — ${f(s.chatOnlyCredits)}`);
+  log.appendLine(`  CLI totals dropped (session also in debug logs): ${f(s.droppedCliCredits)}`);
+}
+
+function setupWatchers(context: vscode.ExtensionContext, settings: Settings): void {
+  const roots = [...defaultUserRoots(), ...settings.additionalRoots, cliSessionRoot()];
+  for (const root of roots) {
+    const pattern = new vscode.RelativePattern(vscode.Uri.file(root), '**/*.jsonl');
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+    const onChange = () => scheduleScan();
+    watcher.onDidCreate(onChange);
+    watcher.onDidChange(onChange);
+    context.subscriptions.push(watcher);
+  }
+}
+
+function scheduleScan(): void {
+  if (watchTimer) {
+    clearTimeout(watchTimer);
+  }
+  // Chat session files are rewritten on every streamed update, so batch bursts.
+  watchTimer = setTimeout(() => void syncNow(false), 5000);
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+function openDashboard(context: vscode.ExtensionContext): void {
+  if (panel) {
+    panel.reveal(vscode.ViewColumn.Active);
+    return;
+  }
+  panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Copilot Credit Lens', vscode.ViewColumn.Active, {
+    enableScripts: true,
+    retainContextWhenHidden: true,
+    localResourceRoots: []
+  });
+  const nonce = crypto.randomBytes(16).toString('hex');
+  panel.webview.html = buildDashboardHtml(nonce, panel.webview.cspSource, computeData());
+  panel.onDidDispose(() => (panel = undefined), null, context.subscriptions);
+  panel.webview.onDidReceiveMessage((msg: WebviewMessage) => handleMessage(msg), null, context.subscriptions);
+}
+
+function handleMessage(msg: WebviewMessage): void {
+  switch (msg.type) {
+    case 'ready':
+      refresh();
+      break;
+    case 'changePeriod':
+      period = msg.period as PeriodId;
+      refresh();
+      break;
+    case 'toggleEstimated':
+      includeEstimated = msg.include;
+      refresh();
+      break;
+    case 'sync':
+      void syncNow(false);
+      break;
+    case 'reset':
+      void resetPeriodCmd();
+      break;
+    case 'export':
+      void exportCsvCmd();
+      break;
+  }
+}
+
+function computeData() {
+  const settings = readSettings();
+  return aggregate(
+    ledger.entries,
+    period,
+    includeEstimated,
+    ledger.resetMarkers,
+    ledger.lastScanAt,
+    new Date(),
+    ledger.workspaceNames,
+    BILLING_START_MS,
+    settings.usdPerCredit
+  );
+}
+
+function refresh(): void {
+  if (panel) {
+    void panel.webview.postMessage({ type: 'updateData', payload: computeData() });
+  }
+  updateStatusBar();
+}
+
+function postSyncStatus(running: boolean): void {
+  if (panel) {
+    void panel.webview.postMessage({ type: 'syncStatus', running });
+  }
+}
+
+function updateStatusBar(): void {
+  const settings = readSettings();
+  if (!settings.statusBarEnabled) {
+    statusBar.hide();
+    return;
+  }
+  // Status bar always reflects exact, current-month credits — the billing figure.
+  const data = aggregate(
+    ledger.entries,
+    'currentMonth',
+    false,
+    ledger.resetMarkers,
+    ledger.lastScanAt,
+    new Date(),
+    ledger.workspaceNames,
+    BILLING_START_MS,
+    settings.usdPerCredit
+  );
+  const cost = data.kpis.creditsPeriod * settings.usdPerCredit;
+  statusBar.text = `$(graph) ${data.kpis.creditsPeriod} AIU`;
+  statusBar.tooltip = `Copilot credits this period (exact): ${data.kpis.creditsPeriod} AIU ≈ $${cost.toFixed(2)}. ${data.kpis.requests} requests. Click to open the dashboard.`;
+  statusBar.show();
+}
+
+// ── Commands ──────────────────────────────────────────────────────────────────
+
+async function resetPeriodCmd(): Promise<void> {
+  const label = await vscode.window.showInputBox({
+    title: 'Reset period',
+    prompt: 'Optional label for this reset marker (does not delete any data).',
+    placeHolder: 'e.g. Q3 start'
+  });
+  if (label === undefined) {
+    return; // cancelled
+  }
+  ledger.addResetMarker(label);
+  await ledger.save();
+  refresh();
+  vscode.window.showInformationMessage('Copilot Credit Lens: reset marker added. Select "Since last reset" to view from here.');
+}
+
+async function exportCsvCmd(): Promise<void> {
+  const scoped = filterByPeriod(ledger.entries, period, ledger.resetMarkers, new Date(), BILLING_START_MS);
+  if (scoped.length === 0) {
+    vscode.window.showWarningMessage('Copilot Credit Lens: no entries to export for the selected period.');
+    return;
+  }
+  const label = PERIODS.find((p) => p.id === period)?.label.replace(/\s+/g, '-').toLowerCase() ?? 'export';
+  const target = await vscode.window.showSaveDialog({
+    title: 'Export usage to CSV',
+    filters: { 'CSV files': ['csv'] },
+    saveLabel: 'Export',
+    defaultUri: vscode.Uri.file(`copilot-credits-${label}.csv`)
+  });
+  if (!target) {
+    return;
+  }
+  try {
+    await fsp.writeFile(target.fsPath, toCsv(scoped), 'utf8');
+    const open = await vscode.window.showInformationMessage(
+      `Copilot Credit Lens: exported ${scoped.length} rows.`,
+      'Open'
+    );
+    if (open === 'Open') {
+      void vscode.window.showTextDocument(target);
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`Copilot Credit Lens: export failed — ${message(err)}`);
+  }
+}
+
+/** Write a timestamped-name-free backup copy into the configured folder. */
+async function autoBackup(dir: string): Promise<void> {
+  try {
+    await fsp.mkdir(dir, { recursive: true });
+    await ledger.exportTo(path.join(dir, 'copilot-credit-lens-backup.json'));
+    log.appendLine(`Auto-backup written to ${dir}`);
+  } catch (err) {
+    log.appendLine(`Auto-backup failed: ${message(err)}`);
+  }
+}
+
+async function exportBackupCmd(): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  const target = await vscode.window.showSaveDialog({
+    title: 'Export data backup (full ledger)',
+    filters: { 'JSON files': ['json'] },
+    saveLabel: 'Back up',
+    defaultUri: vscode.Uri.file(`copilot-credit-lens-backup-${date}.json`)
+  });
+  if (!target) {
+    return;
+  }
+  try {
+    await ledger.exportTo(target.fsPath);
+    const open = await vscode.window.showInformationMessage(
+      `Copilot Credit Lens: backed up ${ledger.entries.length} entr${ledger.entries.length === 1 ? 'y' : 'ies'}.`,
+      'Open'
+    );
+    if (open === 'Open') {
+      void vscode.window.showTextDocument(target);
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`Copilot Credit Lens: backup failed — ${message(err)}`);
+  }
+}
+
+async function clearLedgerCmd(): Promise<void> {
+  const confirm = await vscode.window.showWarningMessage(
+    'Permanently delete all imported Copilot usage data? This cannot be undone. (Your Copilot log files are not touched.)',
+    { modal: true },
+    'Delete all data'
+  );
+  if (confirm !== 'Delete all data') {
+    return;
+  }
+  await ledger.clear();
+  refresh();
+  vscode.window.showInformationMessage('Copilot Credit Lens: all data cleared.');
+}
+
+async function rebuildWorkspaceNamesCmd(): Promise<void> {
+  const settings = readSettings();
+  const roots = [...defaultUserRoots(), ...settings.additionalRoots];
+  let resolved = 0;
+  for (const hash of ledger.workspaceKeys()) {
+    if (hash === 'cli' || hash === 'no-workspace') {
+      continue;
+    }
+    const name = await resolveWorkspaceNameForHash(roots, hash);
+    if (name) {
+      ledger.setWorkspaceName(hash, name);
+      resolved++;
+    }
+  }
+  await ledger.save();
+  refresh();
+  vscode.window.showInformationMessage(
+    `Copilot Credit Lens: resolved ${resolved} workspace name(s). Names still shown as a hash have no readable workspace metadata on disk.`
+  );
+}
+
+async function enableDebugLoggingCmd(): Promise<void> {
+  try {
+    await vscode.workspace.getConfiguration().update(DEBUG_SETTING, true, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage(
+      'Copilot Credit Lens: enabled Copilot agent debug logging. Restart VS Code, then run "Sync Now". Debug logs add per-call model detail; exact credits are read from chat sessions either way.'
+    );
+  } catch (err) {
+    vscode.window.showErrorMessage(`Copilot Credit Lens: could not update setting — ${message(err)}`);
+  }
+}
+
+function message(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
