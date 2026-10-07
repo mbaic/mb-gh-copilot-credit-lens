@@ -2,7 +2,7 @@
   "name": "mb-gh-copilot-credit-lens",
   "displayName": "GitHub Copilot Credit Lens",
   "description": "Local-first GitHub Copilot credit & token usage tracker for VS Code. Reads local session logs, keeps its own ledger, and shows analytics. No API. No telemetry. Fully offline.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "MBS",
   "license": "MIT",
   "icon": ".images/icon.png",
@@ -83,21 +83,6 @@
     "configuration": {
       "title": "GitHub Copilot Credit Lens",
       "properties": {
-        "copilotCreditLens.autoSync": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run a full backfill scan of local Copilot logs when VS Code starts."
-        },
-        "copilotCreditLens.watcherEnabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Watch local Copilot log folders and ingest new usage incrementally while VS Code is open."
-        },
-        "copilotCreditLens.openOnStartup": {
-          "type": "boolean",
-          "default": false,
-          "description": "Open the dashboard automatically when VS Code starts."
-        },
         "copilotCreditLens.statusBarEnabled": {
           "type": "boolean",
           "default": true,
@@ -126,27 +111,6 @@
           "default": "currentMonth",
           "description": "Period the dashboard selects on open."
         },
-        "copilotCreditLens.includeEstimated": {
-          "type": "boolean",
-          "default": false,
-          "description": "When on, dashboard totals include estimated credits for records that lack an exact billing value. When off, only exact credits are counted (estimates are still shown as a separate, clearly-labelled statistic).",
-          "markdownDescription": "When on, dashboard totals include **estimated** credits for records that have no exact `copilotUsageNanoAiu` billing value. When off (default), totals count **exact credits only** — estimates remain visible as a separate, clearly-labelled statistic. This is a default; the dashboard has its own toggle."
-        },
-        "copilotCreditLens.includeChatSessions": {
-          "type": "boolean",
-          "default": false,
-          "description": "Parse VS Code Copilot Chat session logs (chatSessions/*.jsonl). Off by default: these files carry no exact billing value and overlap the same sessions as the agent debug logs, so the debug logs are used as the authoritative meter. Reserved for future token-only estimation."
-        },
-        "copilotCreditLens.includeDebugLogs": {
-          "type": "boolean",
-          "default": true,
-          "description": "Parse VS Code Copilot agent debug logs (requires github.copilot.chat.agentDebugLog.fileLogging.enabled)."
-        },
-        "copilotCreditLens.includeCliSessions": {
-          "type": "boolean",
-          "default": true,
-          "description": "Parse GitHub Copilot CLI session logs (~/.copilot/session-state/*/events.jsonl)."
-        },
         "copilotCreditLens.additionalRoots": {
           "type": "array",
           "items": {
@@ -161,27 +125,12 @@
           "description": "Optional folder. When set, a full copy of the ledger (copilot-credit-lens-backup.json) is written here automatically after any sync that imports new data. Leave empty to disable auto-backup.",
           "markdownDescription": "Optional folder for **automatic backups**. When set, a full copy of the ledger (`copilot-credit-lens-backup.json`) is written here after any sync that imports new data — a durable copy outside VS Code's global storage. Leave empty to disable. Manual backups are always available via the **Export Data Backup (JSON)** command."
         },
-        "copilotCreditLens.billingStartDate": {
-          "type": "string",
-          "default": "2026-06-01",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-          "description": "Billing start date (YYYY-MM-DD). No usage before this date is counted in any period. GitHub usage-based billing began 2026-06-01, which is also the earliest allowed value; earlier dates are clamped to it.",
-          "markdownDescription": "Billing start date (`YYYY-MM-DD`). Usage before this date is **never** counted, so *All time* and the rolling 3–12 month windows effectively start here. GitHub usage-based billing began **2026-06-01**, which is the earliest allowed value (earlier dates are clamped to it). *Current period* is still the current calendar month."
-        },
         "copilotCreditLens.usdPerCredit": {
           "type": "number",
           "default": 0.01,
           "minimum": 0,
           "description": "USD value of one AI Credit, used for the estimated cost figures. GitHub usage-based billing (from 2026-06-01) prices 1 AI Credit at $0.01. Adjust for currency or plan changes. Cost is gross and does not subtract your plan's included monthly allowance.",
           "markdownDescription": "USD value of one **AI Credit**, used for the estimated cost shown on the dashboard. GitHub usage-based billing (from 2026-06-01) prices **1 AI Credit = $0.01**. Adjust for currency/plan changes. The estimated cost is **gross** — it does not subtract your plan's included monthly credit allowance. Set to `0` to hide cost figures."
-        },
-        "copilotCreditLens.otherUsageBufferPercent": {
-          "type": "number",
-          "default": 17.5,
-          "minimum": 0,
-          "maximum": 500,
-          "description": "Percent added on top of the locally-tracked credit total to approximate GitHub-side Copilot usage this extension cannot see (Coding Agent PRs, PR code review requested on github.com/mobile/CLI, other editors or devices). This extension only reads local VS Code/CLI logs, so its totals are always a lower bound on your true GitHub account usage, and there is no reliable way to compute the real gap from local data alone. The default (17.5) is one real observed gap for one billing period on one account, meant only as a starting point — recalibrate it for yourself by comparing the dashboard's total for a period against your official usage at github.com > Settings > Billing and licensing > Copilot usage, then setting this to the percentage that closes the gap. It will drift over time as your mix of Coding Agent / PR review / other-device usage changes, so re-check it periodically. Set to 0 to show only the verified local total.",
-          "markdownDescription": "Percent added on top of the locally-tracked credit total to approximate GitHub-side Copilot usage this extension cannot see (**Coding Agent** PRs, **PR code review** requested on github.com/mobile/CLI, other editors or devices). This extension only reads local VS Code/CLI logs, so its totals are always a **lower bound** on your true GitHub account usage — there is no reliable way to compute the real gap from local data alone, so this is never inferred automatically. The default (`17.5`) is **one real observed gap for one billing period on one account**, meant only as a starting point — recalibrate it for yourself by comparing the dashboard's total for a period against your official usage at **github.com → Settings → Billing and licensing → Copilot usage**, then setting this to the percentage that closes the gap. It will drift over time as your mix of Coding Agent / PR review / other-device usage changes, so re-check it periodically. Set to `0` to show only the verified local total."
         }
       }
     }

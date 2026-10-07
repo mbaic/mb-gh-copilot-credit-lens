@@ -22,10 +22,6 @@ export interface DashboardData {
     creditsToday: number;
     requests: number;
     topModel: string;
-    /** creditsPeriod scaled by (1 + otherUsageBufferPercent/100) — a user-calibrated
-     *  guess at your real GitHub-wide total, since this extension only sees local
-     *  logs. Equals creditsPeriod when the buffer is 0 (the default). */
-    estimatedAccountTotal: number;
   };
   daily: { date: string; credits: number }[];
   byModel: Bucket[];
@@ -46,10 +42,6 @@ export interface DashboardData {
   unknownModels: string[];
   /** USD per AI Credit (GitHub usage-based billing: 1 credit = $0.01). Configurable. */
   usdPerCredit: number;
-  /** User-calibrated percent added to creditsPeriod to approximate GitHub-side
-   *  usage this extension cannot observe locally (Coding Agent, PR code review,
-   *  other editors/devices). 0 by default — never invented automatically. */
-  otherUsageBufferPercent: number;
   periods: { id: PeriodId; label: string }[];
 }
 
@@ -112,7 +104,58 @@ export function periodStart(
   return natural === null ? billingStartMs : Math.max(natural, billingStartMs);
 }
 
-/** Entries that fall within the selected period (and on/after the billing start). */
+/**
+ * Collapse usage that more than one local source recorded, so nothing is
+ * counted twice. The ledger keeps every source's rows; this runs on read.
+ *
+ * - Debug-log rows (one per model call) always win: they are the most granular.
+ * - A chat turn is dropped when its session's debug log has a call between
+ *   that turn's start and the next turn's start (the debug-log folder is named
+ *   after the chat session id). Turns the debug log missed — logging off,
+ *   or the log pruned by Copilot's 50-session retention — are kept.
+ * - A CLI session total is dropped when the same session also has debug-log
+ *   rows (Copilot CLI sessions run from inside VS Code write both).
+ */
+export function resolveOverlaps(entries: readonly UsageEntry[]): UsageEntry[] {
+  const debugTimes = new Map<string, number[]>();
+  for (const e of entries) {
+    if (e.source === 'debug') {
+      const list = debugTimes.get(e.sessionId) ?? [];
+      list.push(Date.parse(e.timestamp));
+      debugTimes.set(e.sessionId, list);
+    }
+  }
+  if (debugTimes.size === 0) {
+    return entries.slice();
+  }
+
+  // Each chat turn's window ends where the session's next turn starts.
+  const turnStarts = new Map<string, number[]>();
+  for (const e of entries) {
+    if (e.source === 'chat' && debugTimes.has(e.sessionId)) {
+      const list = turnStarts.get(e.sessionId) ?? [];
+      list.push(Date.parse(e.timestamp));
+      turnStarts.set(e.sessionId, list);
+    }
+  }
+  turnStarts.forEach((list) => list.sort((a, b) => a - b));
+
+  return entries.filter((e) => {
+    const calls = debugTimes.get(e.sessionId);
+    if (!calls || e.source === 'debug') {
+      return true;
+    }
+    if (e.source === 'cli') {
+      return false;
+    }
+    const start = Date.parse(e.timestamp);
+    const end = turnStarts.get(e.sessionId)?.find((t) => t > start) ?? Infinity;
+    return !calls.some((t) => t >= start && t < end);
+  });
+}
+
+/** De-duplicated entries that fall within the selected period (and on/after
+ *  the billing start). */
 export function filterByPeriod(
   entries: readonly UsageEntry[],
   period: PeriodId,
@@ -120,11 +163,12 @@ export function filterByPeriod(
   now: Date,
   billingStartMs: number | null = null
 ): UsageEntry[] {
+  const unique = resolveOverlaps(entries);
   const start = periodStart(period, markers, now, billingStartMs);
   if (start === null) {
-    return entries.slice();
+    return unique;
   }
-  return entries.filter((e) => new Date(e.timestamp).getTime() >= start);
+  return unique.filter((e) => new Date(e.timestamp).getTime() >= start);
 }
 
 /** Build the full dashboard payload for a period and credit-counting mode. */
@@ -137,8 +181,7 @@ export function aggregate(
   now: Date = new Date(),
   workspaceNames: Record<string, string> = {},
   billingStartMs: number | null = null,
-  usdPerCredit = 0,
-  otherUsageBufferPercent = 0
+  usdPerCredit = 0
 ): DashboardData {
   const scoped = filterByPeriod(entries, period, markers, now, billingStartMs);
   const value = (e: UsageEntry): number =>
@@ -155,9 +198,11 @@ export function aggregate(
   let creditsToday = 0;
   let estimatedRequestCount = 0;
   let exactCount = 0;
+  let requests = 0;
 
   for (const e of scoped) {
     const credits = value(e);
+    requests += requestCount(e);
     creditsPeriod += credits;
     const day = dateKey(new Date(e.timestamp));
     if (day === todayKey) {
@@ -173,7 +218,7 @@ export function aggregate(
       totals.exactCredits += e.creditsExact;
       exactCount++;
     } else {
-      estimatedRequestCount++;
+      estimatedRequestCount += requestCount(e);
       totals.fallbackCredits += e.creditsEstimated;
     }
     totals.inputTokens += e.inputTokens;
@@ -197,9 +242,8 @@ export function aggregate(
     kpis: {
       creditsPeriod: round4(creditsPeriod),
       creditsToday: round4(creditsToday),
-      requests: scoped.length,
-      topModel: byModel.length ? byModel[0].label : '—',
-      estimatedAccountTotal: round4(creditsPeriod * (1 + otherUsageBufferPercent / 100))
+      requests,
+      topModel: byModel.length ? byModel[0].label : '—'
     },
     daily: [...dayCredits.entries()]
       .map(([date, credits]) => ({ date, credits: round4(credits) }))
@@ -217,7 +261,6 @@ export function aggregate(
     estimatedRequestCount,
     unknownModels,
     usdPerCredit,
-    otherUsageBufferPercent,
     periods: PERIODS
   };
 }
@@ -240,9 +283,14 @@ function resolveWorkspaceLabel(e: UsageEntry, names: Record<string, string>): st
 function addTo(map: Map<string, Bucket>, label: string, credits: number, e: UsageEntry): void {
   const bucket = map.get(label) ?? { label, credits: 0, requests: 0, tokens: 0 };
   bucket.credits += credits;
-  bucket.requests += 1;
+  bucket.requests += requestCount(e);
   bucket.tokens += e.inputTokens + e.outputTokens;
   map.set(label, bucket);
+}
+
+/** Requests an entry represents (CLI session totals carry their own count). */
+function requestCount(e: UsageEntry): number {
+  return e.requests ?? 1;
 }
 
 function sortBuckets(map: Map<string, Bucket>): Bucket[] {

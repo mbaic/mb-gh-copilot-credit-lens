@@ -22,7 +22,7 @@ import { CclConfig, resolveConfig, storageDir, billingStartMs, isPeriod, ratesOv
 import { applyRateOverrides, effectiveRates } from './rates';
 
 /** The CLI tool only ever scans the Copilot CLI source — never VS Code storage. */
-const CLI_SCAN: ScanConfig = { roots: [], includeChat: false, includeDebug: false, includeCli: true };
+const CLI_SCAN: ScanConfig = { roots: [] }; // Copilot CLI sessions only
 
 interface Flags {
   help: boolean;

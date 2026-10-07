@@ -21,16 +21,20 @@ Small, single-purpose modules with a deliberate split (UI vs. logic vs. I/O):
 - **`src/paths.ts`** — all platform-specific path logic and file discovery
   (`discoverChatFiles` / `discoverDebugFiles` / `discoverCliFiles`) plus workspace
   name resolution. Missing folders return empty, never throw.
-- **`src/parsers.ts`** — `parseFile(file, fromCursor)` reads only the appended
-  tail of a JSONL file, tolerates malformed/unknown lines, and normalizes events
-  into `UsageEntry`. Resilient field extraction via key aliases.
+- **`src/parsers.ts`** — `parseFile(file, fromCursor)` dispatches by source:
+  debug logs are read incrementally (appended tail only); chat sessions (`.json`
+  or the JSONL mutation log, replayed) and CLI `events.jsonl` (`session.shutdown`
+  / `session.usage_checkpoint`) are re-read as snapshots when their mtime/size
+  changes. Tolerates malformed/unknown lines; normalizes into `UsageEntry`.
 - **`src/ledger.ts`** — `LedgerStore`: atomic, backup-protected JSON persistence
-  in `globalStorageUri`; per-file cursors; id + cross-source logical dedup
-  (`debug` > `chat` > `cli`).
+  in `globalStorageUri`; per-file cursors; append (debug) or upsert-by-id
+  (snapshot sources); schema migration in `normalize()`.
 - **`src/scanner.ts`** — `runScan(ledger, config)` ties discovery + parsing +
   ledger together. Adding a source touches only paths/parsers/scanner.
 - **`src/aggregate.ts`** — pure period filtering and aggregation into
   `DashboardData` (KPIs, daily series, by-model/source/workspace, trust chip).
+  `resolveOverlaps()` removes cross-source double counting on read (a debug log
+  replaces the chat turns it covers; a CLI session with a debug log is dropped).
 - **`src/csv.ts`** — `toCsv(entries)`, RFC-4180-style escaping.
 - **`src/dashboard.ts`** — the webview: HTML shell + inline CSS + a nonce'd inline
   script that renders hand-built HTML/CSS charts (daily bars with value labels +
@@ -53,15 +57,13 @@ When changing code, preserve all of these:
    log file — it only writes its own ledger/CSV to chosen locations.
 4. **Resilient parsing.** Treat log schemas as evolving: ignore unknown fields,
    tolerate missing ones, and never let one bad line/file abort a scan.
-5. **Honest credits.** Exact billing values (`copilotUsageNanoAiu / 1e9`) are
-   used as-is; estimates are always flagged and excluded from totals unless the
-   user opts in. Keep the exact/estimated/trust distinction intact. The extension
-   only reads local logs, so its totals are a structural lower bound on real
-   GitHub account usage (Coding Agent, PR code review, other editors/devices
-   aren't visible locally) — never silently correct for this. The one exception,
-   `otherUsageBufferPercent`, is explicit: a user-calibrated percent that scales
-   the headline KPI to approximate the real total, always tagged `≈ Assumed` in
-   the UI so it's never mistaken for a measured or billed value.
+5. **Honest credits.** Exact billing values (chat-session `copilotCredits`,
+   debug-log/CLI `copilotUsageNanoAiu`/`totalNanoAiu` / 1e9) are used as-is;
+   estimates are always flagged and excluded from totals unless the user opts
+   in. Keep the exact/estimated/trust distinction intact. The extension only
+   reads local files, so its totals are a structural lower bound on real GitHub
+   account usage (Coding Agent, PR code review, other machines/editors aren't
+   visible locally) — never silently correct or scale for this.
 6. **`npm audit` must pass** at `--audit-level=moderate` (0 vulnerabilities).
 7. **Webview safety:** strict CSP, a per-load script nonce, no remote resources,
    and `textContent` for any log-derived string.
@@ -83,13 +85,9 @@ run `parseFile` → `LedgerStore` → `aggregate` → `toCsv` and assert), then
 
 ## Settings (all under `copilotCreditLens.*`)
 
-`autoSync` · `watcherEnabled` · `openOnStartup` · `statusBarEnabled` ·
-`defaultPeriod` · `includeEstimated` · `includeChatSessions` ·
-`includeDebugLogs` · `includeCliSessions` · `additionalRoots` · `backupDirectory` ·
-`billingStartDate` (floor 2026-06-01; clamps all periods) · `usdPerCredit`
-(cost = credits × rate; 1 AI Credit = $0.01) · `otherUsageBufferPercent`
-(default 17.5; user-calibrated guess at non-local GitHub usage — see README's
-"Scope: local-only totals" section).
+`statusBarEnabled` · `defaultPeriod` · `additionalRoots` · `backupDirectory` ·
+`usdPerCredit` (cost = credits × rate; 1 AI Credit = $0.01). All sources are
+always scanned and watched; the 2026-06-01 billing floor is fixed.
 
 Adding a setting touches two places: `package.json` (`contributes.configuration`)
 and `readSettings()` in `extension.ts` (plus the consumer that uses it).

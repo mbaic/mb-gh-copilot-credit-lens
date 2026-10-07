@@ -458,11 +458,7 @@ There is no `workbench` settings store, so resolve config in this precedence
    CLI flags/commands).
 4. Defaults identical to `package.json` (`billingStartDate` floor `2026-06-01`,
    `usdPerCredit` `0.01`, `defaultPeriod` `currentMonth`, `includeEstimated`
-   false). Exception: `otherUsageBufferPercent` (the VS Code dashboard's
-   "≈ Assumed" headline buffer, default `17.5`) is VS Code-only for now — the
-   CLI/terminal front-ends still show only the verified local total; `aggregate()`
-   defaults the parameter to `0` when a caller omits it, so this is backward
-   compatible, not a breaking change.
+   false).
 
 Storage dir for the ledger: `~/.local/share/copilot-credit-lens/` (Linux),
 `~/Library/Application Support/copilot-credit-lens/` (macOS),

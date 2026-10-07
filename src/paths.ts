@@ -128,61 +128,105 @@ function lastSegment(p: string): string {
   return parts.length ? parts[parts.length - 1] : cleaned;
 }
 
-/** Discover VS Code Copilot Chat session files across the given User roots. */
+/** Display name for usage from windows with no folder open. */
+export const NO_FOLDER_NAME = '(no folder)';
+const NO_FOLDER_KEY = 'no-workspace';
+
+/** Copilot Chat's storage folder: workspace storage keeps the extension id's
+ *  casing, global storage lowercases it. Try both so case-sensitive file
+ *  systems (Linux) resolve either way. */
+const COPILOT_STORAGE_DIRS = ['GitHub.copilot-chat', 'github.copilot-chat'];
+
+function isChatSessionFile(name: string): boolean {
+  return name.endsWith('.jsonl') || name.endsWith('.json');
+}
+
+/** Discover VS Code chat session files (which carry exact per-turn credits)
+ *  across the given User roots: per-workspace `chatSessions/` plus the global
+ *  `emptyWindowChatSessions/` used by windows with no folder open. */
 export async function discoverChatFiles(roots: string[]): Promise<DiscoveredFile[]> {
   const out: DiscoveredFile[] = [];
+  const add = (dir: string, files: string[], key: string, name: string) => {
+    for (const file of files) {
+      out.push({
+        filePath: path.join(dir, file),
+        source: 'chat',
+        sessionId: file.replace(/\.jsonl?$/, ''),
+        workspaceKey: key,
+        workspaceName: name
+      });
+    }
+  };
   for (const root of roots) {
     const wsRoot = path.join(root, 'workspaceStorage');
     for (const hash of await listDir(wsRoot)) {
       const wsDir = path.join(wsRoot, hash);
       const chatDir = path.join(wsDir, 'chatSessions');
-      const files = (await listDir(chatDir)).filter((f) => f.endsWith('.jsonl'));
+      const files = (await listDir(chatDir)).filter(isChatSessionFile);
       if (files.length === 0) {
         continue;
       }
-      const name = await resolveWorkspaceName(wsDir, hash);
-      for (const file of files) {
-        out.push({
-          filePath: path.join(chatDir, file),
-          source: 'chat',
-          sessionId: path.basename(file, '.jsonl'),
-          workspaceKey: hash,
-          workspaceName: name
-        });
-      }
+      const name = hash === NO_FOLDER_KEY ? NO_FOLDER_NAME : await resolveWorkspaceName(wsDir, hash);
+      add(chatDir, files, hash, name);
     }
+    const emptyDir = path.join(root, 'globalStorage', 'emptyWindowChatSessions');
+    add(emptyDir, (await listDir(emptyDir)).filter(isChatSessionFile), NO_FOLDER_KEY, NO_FOLDER_NAME);
   }
   return out;
 }
 
-/** Discover VS Code Copilot agent debug-log files across the given User roots. */
+/** Append every `*.jsonl` under `<debugRoot>/<session>/` (main log plus any
+ *  sub-agent logs) as a debug-log source. */
+async function addDebugSessions(
+  out: DiscoveredFile[],
+  debugRoot: string,
+  workspaceKey: string,
+  workspaceName: string
+): Promise<void> {
+  for (const session of await listDir(debugRoot)) {
+    const sessionDir = path.join(debugRoot, session);
+    for (const file of await listDir(sessionDir)) {
+      if (!file.endsWith('.jsonl')) {
+        continue;
+      }
+      out.push({
+        filePath: path.join(sessionDir, file),
+        source: 'debug',
+        sessionId: session,
+        workspaceKey,
+        workspaceName
+      });
+    }
+  }
+}
+
+/** Discover VS Code Copilot agent debug-log files across the given User roots:
+ *  per-workspace storage plus global storage (windows with no folder open). */
 export async function discoverDebugFiles(roots: string[]): Promise<DiscoveredFile[]> {
   const out: DiscoveredFile[] = [];
+  const seen = new Set<string>();
   for (const root of roots) {
     const wsRoot = path.join(root, 'workspaceStorage');
     for (const hash of await listDir(wsRoot)) {
       const wsDir = path.join(wsRoot, hash);
-      const debugRoot = path.join(wsDir, 'GitHub.copilot-chat', 'debug-logs');
-      const sessions = await listDir(debugRoot);
-      if (sessions.length === 0) {
+      for (const dirName of COPILOT_STORAGE_DIRS) {
+        const debugRoot = path.join(wsDir, dirName, 'debug-logs');
+        const sessions = await listDir(debugRoot);
+        if (sessions.length === 0 || seen.has(debugRoot.toLowerCase())) {
+          continue;
+        }
+        seen.add(debugRoot.toLowerCase());
+        const name = hash === NO_FOLDER_KEY ? NO_FOLDER_NAME : await resolveWorkspaceName(wsDir, hash);
+        await addDebugSessions(out, debugRoot, hash, name);
+      }
+    }
+    for (const dirName of COPILOT_STORAGE_DIRS) {
+      const debugRoot = path.join(root, 'globalStorage', dirName, 'debug-logs');
+      if (seen.has(debugRoot.toLowerCase()) || (await listDir(debugRoot)).length === 0) {
         continue;
       }
-      const name = await resolveWorkspaceName(wsDir, hash);
-      for (const session of sessions) {
-        const sessionDir = path.join(debugRoot, session);
-        for (const file of await listDir(sessionDir)) {
-          if (!file.endsWith('.jsonl')) {
-            continue;
-          }
-          out.push({
-            filePath: path.join(sessionDir, file),
-            source: 'debug',
-            sessionId: session,
-            workspaceKey: hash,
-            workspaceName: name
-          });
-        }
-      }
+      seen.add(debugRoot.toLowerCase());
+      await addDebugSessions(out, debugRoot, NO_FOLDER_KEY, NO_FOLDER_NAME);
     }
   }
   return out;

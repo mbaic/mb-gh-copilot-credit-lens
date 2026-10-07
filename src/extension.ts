@@ -37,7 +37,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const settings = readSettings();
   period = settings.defaultPeriod;
-  includeEstimated = settings.includeEstimated;
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBar.command = 'copilotCreditLens.openDashboard';
@@ -55,18 +54,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('copilotCreditLens.rebuildWorkspaceNames', rebuildWorkspaceNamesCmd)
   );
 
-  if (settings.watcherEnabled) {
-    setupWatchers(context, settings);
-  }
-
-  if (settings.autoSync) {
-    void syncNow(false);
-  }
-  if (settings.openOnStartup) {
-    openDashboard(context);
-  }
-
-  maybePromptForDebugLogging(context, settings);
+  setupWatchers(context, settings);
+  void syncNow(false);
 }
 
 export function deactivate(): void {
@@ -78,67 +67,30 @@ export function deactivate(): void {
 // ── Settings ────────────────────────────────────────────────────────────────
 
 interface Settings {
-  autoSync: boolean;
-  watcherEnabled: boolean;
-  openOnStartup: boolean;
   statusBarEnabled: boolean;
   defaultPeriod: PeriodId;
-  includeEstimated: boolean;
-  includeChat: boolean;
-  includeDebug: boolean;
-  includeCli: boolean;
   additionalRoots: string[];
   backupDirectory: string;
-  billingStartDate: string;
   usdPerCredit: number;
-  otherUsageBufferPercent: number;
 }
 
 /** GitHub usage-based billing started 2026-06-01 at 00:00:00 UTC; never count
  *  anything before it. Computed in UTC to match GitHub's reset instant. */
-const BILLING_FLOOR_MS = Date.UTC(2026, 5, 1);
-
-/** Parse the configured billing start date (YYYY-MM-DD, UTC midnight — matching
- *  GitHub's UTC billing reset), clamped so it can never be earlier than
- *  2026-06-01. Invalid input falls back to the floor. */
-function billingStartMsFrom(dateStr: string): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateStr || '').trim());
-  if (m) {
-    const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    if (!Number.isNaN(ms)) {
-      return Math.max(ms, BILLING_FLOOR_MS);
-    }
-  }
-  return BILLING_FLOOR_MS;
-}
+const BILLING_START_MS = Date.UTC(2026, 5, 1);
 
 function readSettings(): Settings {
   const c = vscode.workspace.getConfiguration('copilotCreditLens');
   return {
-    autoSync: c.get('autoSync', true),
-    watcherEnabled: c.get('watcherEnabled', true),
-    openOnStartup: c.get('openOnStartup', false),
     statusBarEnabled: c.get('statusBarEnabled', true),
     defaultPeriod: c.get<PeriodId>('defaultPeriod', 'currentMonth'),
-    includeEstimated: c.get('includeEstimated', false),
-    includeChat: c.get('includeChatSessions', false),
-    includeDebug: c.get('includeDebugLogs', true),
-    includeCli: c.get('includeCliSessions', true),
     additionalRoots: c.get<string[]>('additionalRoots', []),
     backupDirectory: c.get<string>('backupDirectory', ''),
-    billingStartDate: c.get<string>('billingStartDate', '2026-06-01'),
-    usdPerCredit: c.get<number>('usdPerCredit', 0.01),
-    otherUsageBufferPercent: c.get<number>('otherUsageBufferPercent', 17.5)
+    usdPerCredit: c.get<number>('usdPerCredit', 0.01)
   };
 }
 
 function scanConfig(settings: Settings): ScanConfig {
-  return {
-    roots: [...defaultUserRoots(), ...settings.additionalRoots],
-    includeChat: settings.includeChat,
-    includeDebug: settings.includeDebug,
-    includeCli: settings.includeCli
-  };
+  return { roots: [...defaultUserRoots(), ...settings.additionalRoots] };
 }
 
 // ── Scanning ──────────────────────────────────────────────────────────────────
@@ -200,7 +152,8 @@ function scheduleScan(): void {
   if (watchTimer) {
     clearTimeout(watchTimer);
   }
-  watchTimer = setTimeout(() => void syncNow(false), 1500);
+  // Chat session files are rewritten on every streamed update, so batch bursts.
+  watchTimer = setTimeout(() => void syncNow(false), 5000);
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -256,9 +209,8 @@ function computeData() {
     ledger.lastScanAt,
     new Date(),
     ledger.workspaceNames,
-    billingStartMsFrom(settings.billingStartDate),
-    settings.usdPerCredit,
-    settings.otherUsageBufferPercent
+    BILLING_START_MS,
+    settings.usdPerCredit
   );
 }
 
@@ -290,7 +242,7 @@ function updateStatusBar(): void {
     ledger.lastScanAt,
     new Date(),
     ledger.workspaceNames,
-    billingStartMsFrom(settings.billingStartDate),
+    BILLING_START_MS,
     settings.usdPerCredit
   );
   const cost = data.kpis.creditsPeriod * settings.usdPerCredit;
@@ -317,14 +269,7 @@ async function resetPeriodCmd(): Promise<void> {
 }
 
 async function exportCsvCmd(): Promise<void> {
-  const settings = readSettings();
-  const scoped = filterByPeriod(
-    ledger.entries,
-    period,
-    ledger.resetMarkers,
-    new Date(),
-    billingStartMsFrom(settings.billingStartDate)
-  );
+  const scoped = filterByPeriod(ledger.entries, period, ledger.resetMarkers, new Date(), BILLING_START_MS);
   if (scoped.length === 0) {
     vscode.window.showWarningMessage('Copilot Credit Lens: no entries to export for the selected period.');
     return;
@@ -408,7 +353,7 @@ async function rebuildWorkspaceNamesCmd(): Promise<void> {
   const roots = [...defaultUserRoots(), ...settings.additionalRoots];
   let resolved = 0;
   for (const hash of ledger.workspaceKeys()) {
-    if (hash === 'cli') {
+    if (hash === 'cli' || hash === 'no-workspace') {
       continue;
     }
     const name = await resolveWorkspaceNameForHash(roots, hash);
@@ -428,34 +373,11 @@ async function enableDebugLoggingCmd(): Promise<void> {
   try {
     await vscode.workspace.getConfiguration().update(DEBUG_SETTING, true, vscode.ConfigurationTarget.Global);
     vscode.window.showInformationMessage(
-      'Copilot Credit Lens: enabled Copilot agent debug logging. Restart VS Code, then run "Sync Now" to capture precise agent credits.'
+      'Copilot Credit Lens: enabled Copilot agent debug logging. Restart VS Code, then run "Sync Now". Debug logs add per-call model detail; exact credits are read from chat sessions either way.'
     );
   } catch (err) {
     vscode.window.showErrorMessage(`Copilot Credit Lens: could not update setting — ${message(err)}`);
   }
-}
-
-function maybePromptForDebugLogging(context: vscode.ExtensionContext, settings: Settings): void {
-  const KEY = 'copilotCreditLens.debugPromptShown';
-  if (!settings.includeDebug || context.globalState.get<boolean>(KEY)) {
-    return;
-  }
-  const enabled = vscode.workspace.getConfiguration().get<boolean>(DEBUG_SETTING, false);
-  if (enabled) {
-    return;
-  }
-  void context.globalState.update(KEY, true);
-  void vscode.window
-    .showInformationMessage(
-      'Copilot Credit Lens: enable Copilot agent debug logging for precise per-request credit data?',
-      'Enable',
-      'Not now'
-    )
-    .then((choice) => {
-      if (choice === 'Enable') {
-        void enableDebugLoggingCmd();
-      }
-    });
 }
 
 function message(err: unknown): string {

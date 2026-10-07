@@ -1,6 +1,7 @@
-// Orchestrates a scan: discover candidate files for the enabled sources, read
-// each from its stored cursor, parse, and append into the ledger. Pure
-// coordination — platform paths live in paths.ts, parsing in parsers.ts.
+// Orchestrates a scan: discover every local Copilot source, read each file from
+// its stored cursor, parse, and merge into the ledger. Pure coordination —
+// platform paths live in paths.ts, parsing in parsers.ts, and cross-source
+// overlap is resolved at read time in aggregate.ts (resolveOverlaps).
 
 import {
   DiscoveredFile,
@@ -12,10 +13,9 @@ import { parseFile } from './parsers';
 import { LedgerStore } from './ledger';
 
 export interface ScanConfig {
+  /** VS Code "User" roots to scan for chat sessions and debug logs. Empty =
+   *  Copilot CLI only (the standalone `ccl` tool and the CLI extension). */
   roots: string[];
-  includeChat: boolean;
-  includeDebug: boolean;
-  includeCli: boolean;
 }
 
 export interface ScanResult {
@@ -24,12 +24,12 @@ export interface ScanResult {
   warnings: string[];
 }
 
-/** Discover every file the current configuration says we should ingest. */
+/** Discover every file we should ingest. */
 export async function discoverAll(config: ScanConfig): Promise<DiscoveredFile[]> {
   const groups = await Promise.all([
-    config.includeChat ? discoverChatFiles(config.roots) : Promise.resolve([]),
-    config.includeDebug ? discoverDebugFiles(config.roots) : Promise.resolve([]),
-    config.includeCli ? discoverCliFiles() : Promise.resolve([])
+    discoverChatFiles(config.roots),
+    discoverDebugFiles(config.roots),
+    discoverCliFiles()
   ]);
   return groups.flat();
 }
@@ -45,7 +45,7 @@ export async function runScan(ledger: LedgerStore, config: ScanConfig): Promise<
     const result = await parseFile(file, cursor);
     warnings.push(...result.warnings);
     if (result.entries.length > 0) {
-      added += ledger.appendEntries(result.entries);
+      added += result.snapshot ? ledger.upsertEntries(result.entries) : ledger.appendEntries(result.entries);
     }
     ledger.setCursor(file.filePath, result.newCursor);
   }

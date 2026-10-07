@@ -3,7 +3,34 @@
 All notable changes to **GitHub Copilot Credit Lens** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0]
+
+### Changed
+- **Exact credits now come from VS Code chat sessions.** Since VS Code 1.125,
+  every chat turn stores its billed cost (`copilotCredits`) in
+  `chatSessions/*.json(l)`, and the session its backend total
+  (`sessionCopilotCredits`). These files are always written and kept until the
+  chat is deleted, unlike agent debug logs (opt-in, newest 50 sessions only).
+  Both storage formats are read: plain JSON and the JSONL mutation log.
+- **Copilot CLI credits are now counted**, per model, from `session.shutdown`
+  and `session.usage_checkpoint` in `events.jsonl` (per-call usage is never
+  written to disk by the CLI).
+- **No-folder windows are scanned**: `globalStorage/emptyWindowChatSessions` and
+  `globalStorage/github.copilot-chat/debug-logs`, shown as workspace "(no folder)".
+- **No double counting across sources** (`resolveOverlaps`): a debug log replaces
+  the chat turns it covers; a CLI session that also wrote a VS Code debug log is
+  counted once.
+- **Ledger schema v2**: on first load, rows and cursors from the old generic
+  chat/CLI parsing are dropped and re-read; imported debug-log rows are kept.
+
+### Removed
+- **`otherUsageBufferPercent`** and the "≈ Assumed" headline — compare with
+  "Credits Used" in VS Code's Copilot status menu instead.
+- Settings `autoSync`, `watcherEnabled`, `openOnStartup`, `includeEstimated`
+  (the dashboard toggle stays), `includeChatSessions`, `includeDebugLogs`,
+  `includeCliSessions` and `billingStartDate` (2026-06-01 is now a fixed floor).
+- The startup prompt to enable agent debug logging (no longer needed for exact
+  credits; the command remains).
 
 ### Added
 - **Extension icon**: added a marketplace/Extensions-view icon (`.images/icon.png`,

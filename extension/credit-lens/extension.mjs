@@ -33,7 +33,7 @@ const { renderDashboard } = core('render-tty.js');
 const { liveSessionEntries } = core('live.js');
 const { resolveConfig, storageDir, billingStartMs, isPeriod } = core('config.js');
 
-const CLI_SCAN = { roots: [], includeChat: false, includeDebug: false, includeCli: true };
+const CLI_SCAN = { roots: [] }; // Copilot CLI sessions only
 
 /** Parse "/credits <period> [--estimated] [--no-color]" argument text. */
 function parseArgs(args) {
@@ -70,9 +70,13 @@ async function handleCredits({ args, ui, session }) {
 
   // Best-effort live metrics for the current (in-flight) session.
   const live = await liveSessionEntries(session, session?.id || 'live-session');
+  // The ledger may already hold this session's on-disk running total
+  // (session.usage_checkpoint); the live metrics supersede it.
+  const liveIds = new Set(live.map((e) => e.sessionId));
+  const history = ledger.entries.filter((e) => !(e.source === 'cli' && liveIds.has(e.sessionId)));
 
   const data = aggregate(
-    [...ledger.entries, ...live],
+    [...history, ...live],
     period,
     includeEstimated,
     ledger.resetMarkers,

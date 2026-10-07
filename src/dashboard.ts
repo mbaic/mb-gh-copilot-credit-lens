@@ -51,7 +51,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </header>
 
 <section class="controls">
-  <label class="field" title="Reporting period the whole dashboard is filtered to. Nothing before the billing start date (default 2026-06-01) is ever counted, so 'All time' and the rolling 3–12 month windows start there. 'Current period' is the current calendar month in UTC, matching GitHub's billing reset.">
+  <label class="field" title="Reporting period the whole dashboard is filtered to. Nothing before GitHub usage-based billing began (2026-06-01) is ever counted, so 'All time' and the rolling 3–12 month windows start there. 'Current period' is the current calendar month in UTC, matching GitHub's billing reset.">
     <span>Period</span>
     <select id="period"></select>
   </label>
@@ -65,8 +65,8 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 </section>
 
 <section class="kpis">
-  <div class="kpi" title="Total credits for the selected period. With copilotCreditLens.otherUsageBufferPercent set above 0, the headline number is your calibrated 'likely real GitHub total' (local total × (1 + buffer%)), rounded to whole credits and tagged '≈ Assumed' since it's your own estimate, never a measured value. The verified local-only figure (exact + estimated) moves to the line below. With the buffer at 0, the headline is the verified local total.">
-    <div class="kpi-label">Credits this period <span id="kpiPeriodBadge" class="badge" hidden>≈ Assumed</span></div><div id="kpiPeriod" class="kpi-value">0</div>
+  <div class="kpi" title="Exact credits for the selected period from local Copilot files on this machine (VS Code chat sessions, agent debug logs, Copilot CLI). Tick 'Include estimated credits' to add estimates for requests that had no exact billing value.">
+    <div class="kpi-label">Credits this period</div><div id="kpiPeriod" class="kpi-value">0</div>
     <div id="kpiPeriodSub" class="kpi-sub"></div></div>
   <div class="kpi" title="Credits used so far today (UTC date, matching GitHub's billing day).">
     <div class="kpi-label">Credits today</div><div id="kpiToday" class="kpi-value">0</div></div>
@@ -89,7 +89,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 <div class="grid-2">
   <section class="card">
     <div class="card-head">
-      <h2 title="Credits and request count per model, from local logs only — excludes any otherUsageBufferPercent applied to the KPI above. Bar length is proportional to credits.">By model</h2>
+      <h2 title="Credits and request count per model, from local Copilot files. Bar length is proportional to credits.">By model</h2>
       <span class="local-tag">Local only</span>
       <span class="legend">credits (requests)</span>
       <div class="spacer"></div>
@@ -101,7 +101,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
   </section>
   <section class="card">
     <div class="card-head">
-      <h2 title="Where usage came from: Agent (debug logs) = VS Code agent/chat sessions with file logging; Chat sessions; Copilot CLI. Local logs only — excludes any otherUsageBufferPercent applied to the KPI above.">By source</h2>
+      <h2 title="Where usage came from: Chat sessions = VS Code chat history (exact per-turn credits); Agent (debug logs) = per-call logs when Copilot debug file logging is on — they replace the matching chat turns, never add to them; Copilot CLI = per-session totals from ~/.copilot.">By source</h2>
       <span class="local-tag">Local only</span>
       <span class="legend">credits (requests)</span>
     </div>
@@ -111,7 +111,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
 
 <section class="card">
   <div class="card-head">
-    <h2 title="Credits, requests and tokens per VS Code workspace/project, from local logs only — excludes any otherUsageBufferPercent applied to the KPI above. Use 'Rebuild Workspace Names' if any show as a hash.">By workspace</h2>
+    <h2 title="Credits, requests and tokens per VS Code workspace/project, from local Copilot files. Use 'Rebuild Workspace Names' if any show as a hash.">By workspace</h2>
     <span class="local-tag">Local only</span>
     <div class="spacer"></div>
     <select id="wsLimit" class="mini" title="How many workspaces to list (by credits).">
@@ -135,7 +135,7 @@ export function buildDashboardHtml(nonce: string, cspSource: string, initialData
     <div title="Sum of cached tokens (read from cache)."><span class="muted">Cached tokens</span><b id="tCached">0</b></div>
     <div title="Credits billed exactly (from copilotUsageNanoAiu)."><span class="muted">Exact credits</span><b id="tExact">0</b></div>
     <div title="Estimated credits for the requests that had NO exact value."><span class="muted">+ Estimated (no exact)</span><b id="tEst">0</b></div>
-    <div title="Exact + estimated. Equals your verified local total (shown in the KPI sub-line) when 'Include estimated credits' is on."><span class="muted">= Total w/ estimates</span><b id="tCombined">0</b></div>
+    <div title="Exact + estimated. Equals the headline total when 'Include estimated credits' is on."><span class="muted">= Total w/ estimates</span><b id="tCombined">0</b></div>
     <div id="costBox" title="Estimated USD cost = your local total × the per-credit rate. Gross — it does not subtract your plan's included monthly allowance."><span class="muted">Est. cost (USD)</span><b id="tCost">—</b></div>
   </div>
   <p id="estNote" class="muted note"></p>
@@ -196,10 +196,8 @@ select.mini { padding: 2px 6px; font-size: 11px; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; cursor: help; }
 .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-.badge { font-size: 9.5px; font-weight: 700; letter-spacing: .03em; padding: 1px 6px; border-radius: 999px; background: rgba(196,154,16,.15); color: #c49a10; border: 1px solid #c49a10; text-transform: uppercase; }
 .kpi-value { font-size: 24px; font-weight: 600; }
 .kpi-value.small { font-size: 15px; word-break: break-word; }
-.kpi-value.assumed { color: #e0c04a; }
 .local-tag { font-size: 8.5px; font-weight: 700; letter-spacing: .03em; padding: 1px 5px; border-radius: 4px; background: rgba(127,127,127,.18); color: var(--muted); text-transform: uppercase; }
 .kpi-sub { font-size: 10px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
@@ -357,37 +355,16 @@ function render() {
 
   const exactC = data.totals.exactCredits, fbC = data.totals.fallbackCredits;
   const rate = data.usdPerCredit || 0;
-  const buffer = data.otherUsageBufferPercent || 0;
   const breakdown = data.includeEstimated
     ? fmt(exactC) + ' exact + ' + fmt(fbC) + ' estimated'
     : (fbC > 0 ? fmt(exactC) + ' exact (+' + fmt(fbC) + ' if estimates on)' : 'all exact');
 
-  // Headline: with a buffer set, the calibrated "likely real total" leads and is
-  // tagged "≈ Assumed"; the verified local-only figure moves to the sub-line.
-  // With no buffer, the headline is the verified local total (unchanged behavior).
-  const headline = buffer > 0 ? data.kpis.estimatedAccountTotal : data.kpis.creditsPeriod;
-  const headlineCost = headline * rate;
-  // The assumed figure is a calibrated guess, so it is rounded to whole credits
-  // rather than shown to 4 decimals — false precision on a number that is
-  // explicitly an estimate. The verified local total keeps full precision.
-  document.getElementById('kpiPeriod').textContent = buffer > 0 ? '≈ ' + fmtInt(headline) : fmt(headline);
-  document.getElementById('kpiPeriod').className = 'kpi-value' + (buffer > 0 ? ' assumed' : '');
-  document.getElementById('kpiPeriodBadge').hidden = buffer <= 0;
-
-  let periodSub;
-  if (buffer > 0) {
-    periodSub = 'local only: ' + fmt(data.kpis.creditsPeriod) + ' (' + breakdown + ')' + ' · + your ' + buffer + '% buffer';
-    if (rate > 0) {
-      periodSub += ' · ≈ ' + fmtUsd(headlineCost);
-    }
-  } else {
-    periodSub = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(headlineCost) : breakdown;
-  }
+  const cost = data.kpis.creditsPeriod * rate;
+  document.getElementById('kpiPeriod').textContent = fmt(data.kpis.creditsPeriod);
+  const periodSub = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(cost) : breakdown;
   document.getElementById('kpiPeriodSub').textContent = periodSub;
   document.getElementById('kpiToday').textContent = fmt(data.kpis.creditsToday);
-  document.getElementById('scopeNote').textContent = buffer > 0
-    ? '≈ Assumed, not a bill — this dashboard only reads local VS Code/CLI logs, so it cannot see GitHub Coding Agent, PR code review, or usage from other editors/devices. Every breakdown below is local-only and will not sum to the headline above. Set copilotCreditLens.otherUsageBufferPercent to 0 to drop the buffer, or recalibrate it against github.com → Settings → Billing and licensing → Copilot usage.'
-    : '⚠ Local-only figure. This dashboard only sees Copilot usage from this VS Code install (chat, agent debug logs, CLI) — it cannot see GitHub Coding Agent PRs, PR code review, or usage from other editors/devices, so your real GitHub account total is typically higher. Compare against github.com → Settings → Billing and licensing → Copilot usage, then set copilotCreditLens.otherUsageBufferPercent to get a "likely real total" estimate here.';
+  document.getElementById('scopeNote').textContent = 'Counts Copilot usage recorded in local files on this machine (VS Code chat sessions, agent debug logs, Copilot CLI). Usage that never reaches this machine — Coding Agent and code review on github.com, other computers or editors — is not included, so compare with "Credits Used" in VS Code\'s Copilot status menu for your account total.';
   document.getElementById('kpiRequests').textContent = fmtInt(data.kpis.requests);
   document.getElementById('kpiModel').textContent = data.kpis.topModel;
 
@@ -405,9 +382,7 @@ function render() {
   document.getElementById('tEst').textContent = fmt(t.fallbackCredits);
   document.getElementById('tCombined').textContent = fmt(combined);
 
-  // Token totals are always the verified local figure, independent of any
-  // otherUsageBufferPercent applied to the KPI headline above.
-  const localCost = data.kpis.creditsPeriod * rate;
+  const localCost = cost;
   document.getElementById('costBox').style.display = rate > 0 ? '' : 'none';
   document.getElementById('tCost').textContent = rate > 0 ? fmtUsd(localCost) : '—';
   document.getElementById('costNote').textContent = rate > 0
@@ -415,7 +390,7 @@ function render() {
     : '';
 
   document.getElementById('estNote').textContent = data.estimatedRequestCount > 0
-    ? data.estimatedRequestCount + ' request(s) had no exact billing value — their credits are estimated. Exact (' + fmt(t.exactCredits) + ') + estimated (' + fmt(t.fallbackCredits) + ') = ' + fmt(combined) + ', which equals your verified local total (shown in the KPI sub-line) when “Include estimated credits” is on (currently ' + (data.includeEstimated ? 'on' : 'off — period shows exact only') + ').'
+    ? data.estimatedRequestCount + ' request(s) had no exact billing value — their credits are estimated. Exact (' + fmt(t.exactCredits) + ') + estimated (' + fmt(t.fallbackCredits) + ') = ' + fmt(combined) + ', which equals the headline total when “Include estimated credits” is on (currently ' + (data.includeEstimated ? 'on' : 'off — period shows exact only') + ').'
     : 'All requests in this period carried an exact billing value.';
 
   const unknown = data.unknownModels || [];

@@ -20,11 +20,13 @@ Since Copilot moved to usage-based billing, every premium request spends AI Cred
 
 | Source | Path | Notes |
 |---|---|---|
-| VS Code Copilot **Chat** | `…/User/workspaceStorage/<hash>/chatSessions/*.jsonl` | Always available once Chat is used |
-| VS Code **agent debug logs** | `…/workspaceStorage/<hash>/GitHub.copilot-chat/debug-logs/**/*.jsonl` | Most precise; requires the debug-logging setting below |
-| Copilot **CLI** | `~/.copilot/session-state/*/events.jsonl` | Created automatically when the CLI is used |
+| VS Code Copilot **Chat sessions** | `…/User/workspaceStorage/<hash>/chatSessions/*.json(l)` and `…/User/globalStorage/emptyWindowChatSessions/` (no folder open) | **Main source.** Exact per-turn credits (`copilotCredits`, VS Code 1.125+), always written, kept until you delete the chat |
+| VS Code **agent debug logs** | `…/workspaceStorage/<hash>/GitHub.copilot-chat/debug-logs/` and `…/globalStorage/github.copilot-chat/debug-logs/` | Optional per-call detail (exact credits per model call); Copilot keeps only the newest 50 sessions |
+| Copilot **CLI** | `~/.copilot/session-state/*/events.jsonl` | Exact per-model session totals from `session.shutdown` / `session.usage_checkpoint` |
 
-Cloud (server-side) coding-agent runs do not produce local billing logs and are **not** tracked in this version — see [ROADMAP.md](ROADMAP.md).
+Overlapping sources are never double-counted: where a debug log covers a chat
+turn it replaces that turn (finer per-call detail), and a CLI session that
+also wrote a VS Code debug log is counted once.
 
 ## Dashboard
 
@@ -44,11 +46,12 @@ Cloud (server-side) coding-agent runs do not produce local billing logs and are 
 - **VS Code 1.90+**
 - **GitHub Copilot Chat** installed and signed in (so logs exist to read)
 - *(optional)* **GitHub Copilot CLI** for CLI-session tracking
-- *(recommended)* enable precise agent credit data:
+- *(optional)* per-call detail (e.g. the sub-agent models inside a turn):
   ```json
   "github.copilot.chat.agentDebugLog.fileLogging.enabled": true
   ```
-  or run **Copilot Credit Lens: Enable Copilot Agent Debug Logging** from the Command Palette, then restart VS Code.
+  or run **Copilot Credit Lens: Enable Copilot Agent Debug Logging**, then restart VS Code.
+  Not needed for exact credits — chat sessions carry them.
 
 ## Usage
 
@@ -62,14 +65,13 @@ Open the Command Palette (`Ctrl/Cmd+Shift+P`) → **Copilot Credit Lens:**
 | Export Usage to CSV | Export the selected period's entries |
 | Export Data Backup (JSON) | Save a full, restorable copy of the ledger |
 | Clear All Data | Wipe the ledger (with confirmation) |
-| Enable Copilot Agent Debug Logging | Turn on precise agent credit logging |
+| Enable Copilot Agent Debug Logging | Turn on optional per-call debug logs |
 | Rebuild Workspace Names | Re-resolve workspace names shown as a hash |
 
 On startup the extension scans existing logs (backfill) and, while open, ingests new usage live via a file watcher.
 
 > **First run / handing it to a tester?** See [TESTING.md](TESTING.md) for the exact
-> prerequisites, settings, install steps, and the **Enable Debug Logging → Clear All
-> Data → Sync Now → Open Dashboard** order.
+> prerequisites, settings, install steps, and what to check after the first sync.
 
 ## Settings
 
@@ -77,56 +79,39 @@ All under `copilotCreditLens.*`:
 
 | Setting | Default | Description |
 |---|---|---|
-| `autoSync` | `true` | Full backfill scan on VS Code startup |
-| `watcherEnabled` | `true` | Live incremental ingestion while open |
-| `openOnStartup` | `false` | Auto-open the dashboard on launch |
 | `statusBarEnabled` | `true` | Show the credit total in the status bar |
 | `defaultPeriod` | `currentMonth` | Period selected when the dashboard opens |
-| `includeEstimated` | `false` | Include estimated credits in totals by default |
-| `includeChatSessions` | `false` | Parse Chat session logs (reserved; debug logs are the authoritative meter — see below) |
-| `includeDebugLogs` | `true` | Parse agent debug logs — the source of exact credits |
-| `includeCliSessions` | `true` | Parse Copilot CLI logs |
 | `additionalRoots` | `[]` | Extra VS Code `User` storage roots (other profiles / Insiders) |
 | `backupDirectory` | `""` | Folder for automatic ledger backups (empty = off) |
-| `billingStartDate` | `"2026-06-01"` | Earliest date counted in any period (min/floor `2026-06-01`) |
 | `usdPerCredit` | `0.01` | USD per AI Credit for cost estimates (`0` hides cost) |
-| `otherUsageBufferPercent` | `17.5` | Percent added on top of the local total to approximate GitHub-side usage this extension can't see (`0` = show only the local total) — see below |
+
+All sources are always scanned on startup and watched while VS Code is open.
+The *Include estimated credits* toggle lives on the dashboard.
 
 Multiple profiles? Point `additionalRoots` at the other profile's folder that contains `workspaceStorage`.
 
-## Scope: local-only totals, and the "≈ Assumed" buffer
+## Scope: what local files can and can't show
 
-This extension only reads Copilot logs that exist **on this machine** (VS Code
-Chat/agent-debug logs, Copilot CLI). It has no network access and cannot see:
+This extension only reads Copilot files that exist **on this machine** (VS Code
+chat sessions and debug logs, Copilot CLI). It makes no network calls, so it
+cannot see usage that never reaches this machine:
 
 - **GitHub Copilot Coding Agent** sessions — these run entirely on GitHub's
   infrastructure, even when triggered from VS Code.
 - **PR code review** requested on github.com, mobile, or `gh pr create --reviewer @copilot`.
-- Copilot usage from **other editors, other devices, or github.com chat directly**.
+- Copilot usage from **other computers, other editors, or github.com chat**.
 
-So the local total is a structural *lower bound* on your real GitHub account
-usage — never the full story. `otherUsageBufferPercent` lets you close that
-gap with your own calibrated guess: compare the dashboard's total for a
-period against your official usage at **github.com → Settings → Billing and
-licensing → Copilot usage**, then set the percentage that closes the gap.
-
-When the buffer is above `0`, the **Credits this period** KPI shows that
-calibrated total as the headline number, tagged **`≈ Assumed`** so it's never
-mistaken for a billed figure — the verified local-only total and the exact
-math move to the line below it, and an always-visible note explains the
-scope. The shipped default (`17.5`) reflects one observed gap for one
-billing period on one account — it is **not** a universal constant. Recalibrate
-it for your own usage mix, and expect it to drift over time as your split
-between Coding Agent, PR review, and local chat/agent-mode usage changes.
-Set it to `0` any time to see only the verified local number.
+Your account total is shown as **Credits Used** in VS Code's Copilot status
+menu (and at github.com → Settings → Billing and licensing → AI usage). That
+figure comes from GitHub's servers and is never written to a local file, so
+the gap between it and this dashboard is exactly the usage listed above.
 
 ## Billing period & cost
 
 - **Billing start date** — GitHub's usage-based billing began **2026-06-01**, so
   nothing earlier is ever counted. *All time* and the rolling 3/6/9/12-month
-  windows therefore start at `billingStartDate` (default and minimum
-  `2026-06-01`); *Current period* is the current calendar month. Set
-  `billingStartDate` to any later date to report from there.
+  windows therefore start there at the earliest; *Current period* is the
+  current calendar month (UTC, matching GitHub's reset).
 - **Cost estimate** — credits are AI Credits, billed at **$0.01 each**
   (`copilotUsageNanoAiu / 1e9 × $0.01`). The dashboard shows an estimated USD
   cost next to the credits. It is **gross** — it does not subtract your plan's

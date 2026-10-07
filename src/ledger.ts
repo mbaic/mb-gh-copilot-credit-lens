@@ -57,15 +57,27 @@ export class LedgerStore {
 
   /** Defensive defaults so an older or partial ledger never throws downstream. */
   private normalize(l: Ledger): Ledger {
+    let entries = Array.isArray(l.entries) ? l.entries : [];
+    let fileCursors = l.fileCursors ?? {};
+    if ((l.schemaVersion ?? 1) < 2) {
+      // v1 parsed chat/CLI files with the generic line parser, which never saw
+      // their exact credits. Drop those rows and cursors so the next scan
+      // re-reads the files with the v2 snapshot parsers. Debug-log rows are
+      // kept: they may outlive Copilot's 50-session log retention.
+      entries = entries.filter((e) => e.source === 'debug');
+      fileCursors = Object.fromEntries(
+        Object.entries(fileCursors).filter(([file]) => /[\\/]debug-logs[\\/]/.test(file))
+      );
+    }
     return {
-      schemaVersion: l.schemaVersion ?? SCHEMA_VERSION,
+      schemaVersion: SCHEMA_VERSION,
       createdAt: l.createdAt ?? new Date().toISOString(),
       updatedAt: l.updatedAt ?? new Date().toISOString(),
       lastScanAt: l.lastScanAt ?? null,
-      fileCursors: l.fileCursors ?? {},
+      fileCursors,
       workspaceMap: l.workspaceMap ?? {},
       resetMarkers: Array.isArray(l.resetMarkers) ? l.resetMarkers : [],
-      entries: Array.isArray(l.entries) ? l.entries : []
+      entries
     };
   }
 
@@ -167,6 +179,33 @@ export class LedgerStore {
       byId.add(entry.id);
       logicalIndex.set(key, this.ledger.entries.length - 1);
       changed++;
+    }
+    return changed;
+  }
+
+  /**
+   * Insert or replace entries by id. Used for snapshot sources (chat sessions,
+   * CLI events) where re-reading a file yields the same ids with possibly
+   * updated values (e.g. a turn's credits grow while it is still running).
+   * Rows whose source file later disappears are kept — the ledger outlives logs.
+   * Returns the number of entries added or changed.
+   */
+  upsertEntries(incoming: UsageEntry[]): number {
+    const index = new Map<string, number>();
+    this.ledger.entries.forEach((entry, i) => index.set(entry.id, i));
+    let changed = 0;
+    for (const entry of incoming) {
+      if (entry.workspaceName && entry.workspaceName !== entry.workspaceKey) {
+        this.ledger.workspaceMap[entry.workspaceKey] = entry.workspaceName;
+      }
+      const i = index.get(entry.id);
+      if (i === undefined) {
+        index.set(entry.id, this.ledger.entries.push(entry) - 1);
+        changed++;
+      } else if (JSON.stringify(this.ledger.entries[i]) !== JSON.stringify(entry)) {
+        this.ledger.entries[i] = entry;
+        changed++;
+      }
     }
     return changed;
   }
