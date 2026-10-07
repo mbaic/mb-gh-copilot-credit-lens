@@ -25,8 +25,11 @@ Since Copilot moved to usage-based billing, every premium request spends AI Cred
 | Copilot **CLI** | `~/.copilot/session-state/*/events.jsonl` | Exact per-model session totals from `session.shutdown` / `session.usage_checkpoint` |
 
 Overlapping sources are never double-counted: where a debug log covers a chat
-turn it replaces that turn (finer per-call detail), and a CLI session that
-also wrote a VS Code debug log is counted once.
+turn, the turn counts once — as the debug log's per-call rows, plus the
+difference if the turn's own billed total is higher (the log missed calls). A
+CLI session that also wrote a VS Code debug log is counted once. After each
+sync, **Output → Copilot Credit Lens** lists the current period's credits per
+source before and after de-duplication.
 
 ## Dashboard
 

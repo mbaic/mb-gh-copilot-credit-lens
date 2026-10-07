@@ -21,6 +21,8 @@ export interface ScanConfig {
 export interface ScanResult {
   added: number;
   filesScanned: number;
+  /** Files discovered per source (chat / debug / cli). */
+  filesBySource: Record<string, number>;
   warnings: string[];
 }
 
@@ -52,5 +54,9 @@ export async function runScan(ledger: LedgerStore, config: ScanConfig): Promise<
 
   ledger.markScanned();
   await ledger.save();
-  return { added, filesScanned: files.length, warnings };
+  const filesBySource: Record<string, number> = {};
+  for (const file of files) {
+    filesBySource[file.source] = (filesBySource[file.source] ?? 0) + 1;
+  }
+  return { added, filesScanned: files.length, filesBySource, warnings };
 }

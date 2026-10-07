@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as fsp from 'fs/promises';
 import { LedgerStore } from './ledger';
 import { runScan, ScanConfig } from './scanner';
-import { aggregate, filterByPeriod, PERIODS } from './aggregate';
+import { aggregate, filterByPeriod, overlapStats, periodStart, PERIODS } from './aggregate';
 import { buildDashboardHtml, WebviewMessage } from './dashboard';
 import { toCsv } from './csv';
 import { cliSessionRoot, defaultUserRoots, resolveWorkspaceNameForHash } from './paths';
@@ -114,6 +114,7 @@ async function syncNow(foreground: boolean): Promise<void> {
     log.appendLine(
       `Scan complete: ${result.filesScanned} file(s), ${result.added} new entr${result.added === 1 ? 'y' : 'ies'}.`
     );
+    logBreakdown(result.filesBySource);
     if (result.warnings.length) {
       log.appendLine(`  ${result.warnings.length} warning(s):`);
       result.warnings.slice(0, 20).forEach((w) => log.appendLine(`    - ${w}`));
@@ -134,6 +135,21 @@ async function syncNow(foreground: boolean): Promise<void> {
     postSyncStatus(false);
     refresh();
   }
+}
+
+/** Write where the current period's credits come from to the Output channel,
+ *  so a gap against Copilot's "Credits Used" can be traced to a source. */
+function logBreakdown(filesBySource: Record<string, number>): void {
+  const start = periodStart('currentMonth', [], new Date(), BILLING_START_MS) ?? BILLING_START_MS;
+  const s = overlapStats(ledger.entries, start);
+  const f = (n: number) => n.toFixed(3);
+  const raw = (src: string) => s.raw[src] ?? { credits: 0, requests: 0 };
+  log.appendLine(`  Files found: chat ${filesBySource.chat ?? 0}, debug ${filesBySource.debug ?? 0}, cli ${filesBySource.cli ?? 0}`);
+  log.appendLine('  Current period, exact credits per source before de-duplication:');
+  log.appendLine(`    chat sessions ${f(raw('chat').credits)} (${raw('chat').requests} turns) | debug logs ${f(raw('debug').credits)} (${raw('debug').requests} calls) | cli ${f(raw('cli').credits)}`);
+  log.appendLine(`  Chat turns also in debug logs: ${s.coveredTurns} — chat ${f(s.coveredChatCredits)} vs debug ${f(s.coveredDebugCredits)}; top-up where chat was higher: ${f(s.topUpCredits)}`);
+  log.appendLine(`  Chat turns with no debug log (counted from chat): ${s.chatOnlyTurns} — ${f(s.chatOnlyCredits)}`);
+  log.appendLine(`  CLI totals dropped (session also in debug logs): ${f(s.droppedCliCredits)}`);
 }
 
 function setupWatchers(context: vscode.ExtensionContext, settings: Settings): void {

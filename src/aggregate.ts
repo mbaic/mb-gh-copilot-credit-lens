@@ -104,54 +104,141 @@ export function periodStart(
   return natural === null ? billingStartMs : Math.max(natural, billingStartMs);
 }
 
+/** Per-source figures behind resolveOverlaps(), for the Output-channel
+ *  breakdown that explains where the headline total comes from. */
+export interface OverlapStats {
+  raw: Record<string, { credits: number; requests: number }>;
+  /** Chat turns whose window also has debug-log calls. */
+  coveredTurns: number;
+  coveredChatCredits: number;
+  coveredDebugCredits: number;
+  /** Credits added where a turn's chat total exceeded its debug-log calls. */
+  topUpCredits: number;
+  /** Chat turns with no debug-log calls (kept as-is). */
+  chatOnlyTurns: number;
+  chatOnlyCredits: number;
+  /** CLI session totals dropped because the session also has debug-log rows. */
+  droppedCliCredits: number;
+}
+
 /**
  * Collapse usage that more than one local source recorded, so nothing is
  * counted twice. The ledger keeps every source's rows; this runs on read.
  *
- * - Debug-log rows (one per model call) always win: they are the most granular.
- * - A chat turn is dropped when its session's debug log has a call between
- *   that turn's start and the next turn's start (the debug-log folder is named
- *   after the chat session id). Turns the debug log missed — logging off,
- *   or the log pruned by Copilot's 50-session retention — are kept.
+ * - Debug-log rows (one per model call) always stay: they are the most granular.
+ * - Chat turns are matched to their session's debug log (the debug-log folder
+ *   is named after the chat session id) by time window: a turn runs from its
+ *   start to the next turn's start. Where the window has debug-log calls, the
+ *   chat turn is replaced by them — and if the turn's own billed total is
+ *   higher (the debug log missed calls), the difference is kept as a
+ *   request-less top-up so the window counts the larger of two exact figures.
+ *   Turns the debug log never saw (logging off, or pruned by Copilot's
+ *   50-session retention) are kept whole.
  * - A CLI session total is dropped when the same session also has debug-log
  *   rows (Copilot CLI sessions run from inside VS Code write both).
  */
-export function resolveOverlaps(entries: readonly UsageEntry[]): UsageEntry[] {
-  const debugTimes = new Map<string, number[]>();
+export function resolveOverlaps(entries: readonly UsageEntry[], stats?: OverlapStats): UsageEntry[] {
+  const debugCalls = new Map<string, { t: number; credits: number }[]>();
+  for (const e of entries) {
+    if (stats) {
+      const r = (stats.raw[e.source] ??= { credits: 0, requests: 0 });
+      r.credits += e.creditsExact ?? 0;
+      r.requests += e.requests ?? 1;
+    }
+    if (e.source === 'debug') {
+      const list = debugCalls.get(e.sessionId) ?? [];
+      list.push({ t: Date.parse(e.timestamp), credits: e.creditsExact ?? 0 });
+      debugCalls.set(e.sessionId, list);
+    }
+  }
+
+  // Chat rows grouped into turn windows: session -> turn start -> rows. A
+  // session-level remainder row shares its last turn's start.
+  const turns = new Map<string, Map<number, UsageEntry[]>>();
+  for (const e of entries) {
+    if (e.source === 'chat') {
+      const bySession = turns.get(e.sessionId) ?? new Map<number, UsageEntry[]>();
+      const start = Date.parse(e.timestamp);
+      bySession.set(start, [...(bySession.get(start) ?? []), e]);
+      turns.set(e.sessionId, bySession);
+    }
+  }
+
+  const out: UsageEntry[] = [];
   for (const e of entries) {
     if (e.source === 'debug') {
-      const list = debugTimes.get(e.sessionId) ?? [];
-      list.push(Date.parse(e.timestamp));
-      debugTimes.set(e.sessionId, list);
+      out.push(e);
+    } else if (e.source === 'cli') {
+      if (debugCalls.has(e.sessionId)) {
+        if (stats) {
+          stats.droppedCliCredits += e.creditsExact ?? 0;
+        }
+      } else {
+        out.push(e);
+      }
+    } else if (e.source !== 'chat') {
+      out.push(e);
     }
-  }
-  if (debugTimes.size === 0) {
-    return entries.slice();
   }
 
-  // Each chat turn's window ends where the session's next turn starts.
-  const turnStarts = new Map<string, number[]>();
-  for (const e of entries) {
-    if (e.source === 'chat' && debugTimes.has(e.sessionId)) {
-      const list = turnStarts.get(e.sessionId) ?? [];
-      list.push(Date.parse(e.timestamp));
-      turnStarts.set(e.sessionId, list);
-    }
-  }
-  turnStarts.forEach((list) => list.sort((a, b) => a - b));
-
-  return entries.filter((e) => {
-    const calls = debugTimes.get(e.sessionId);
-    if (!calls || e.source === 'debug') {
-      return true;
-    }
-    if (e.source === 'cli') {
-      return false;
-    }
-    const start = Date.parse(e.timestamp);
-    const end = turnStarts.get(e.sessionId)?.find((t) => t > start) ?? Infinity;
-    return !calls.some((t) => t >= start && t < end);
+  turns.forEach((bySession, sessionId) => {
+    const starts = [...bySession.keys()].sort((a, b) => a - b);
+    const calls = debugCalls.get(sessionId) ?? [];
+    starts.forEach((start, i) => {
+      const rows = bySession.get(start) ?? [];
+      const chatCredits = rows.reduce((sum, r) => sum + (r.creditsExact ?? 0), 0);
+      const end = i + 1 < starts.length ? starts[i + 1] : Infinity;
+      const inWindow = calls.filter((c) => c.t >= start && c.t < end);
+      if (inWindow.length === 0) {
+        out.push(...rows);
+        if (stats) {
+          stats.chatOnlyTurns++;
+          stats.chatOnlyCredits += chatCredits;
+        }
+        return;
+      }
+      const debugCredits = inWindow.reduce((sum, c) => sum + c.credits, 0);
+      const gap = chatCredits - debugCredits;
+      if (gap > 0.0001) {
+        const turn = rows.find((r) => (r.requests ?? 1) > 0) ?? rows[0];
+        out.push({
+          ...turn,
+          id: `${turn.id}:topup`,
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedTokens: 0,
+          creditsExact: round4(gap),
+          creditsEstimated: 0,
+          isEstimated: false,
+          requests: 0
+        });
+      }
+      if (stats) {
+        stats.coveredTurns++;
+        stats.coveredChatCredits += chatCredits;
+        stats.coveredDebugCredits += debugCredits;
+        stats.topUpCredits += Math.max(0, gap);
+      }
+    });
   });
+  return out;
+}
+
+/** Overlap figures for entries since `startMs`, rounded for display. */
+export function overlapStats(entries: readonly UsageEntry[], startMs: number): OverlapStats {
+  const stats: OverlapStats = {
+    raw: {},
+    coveredTurns: 0,
+    coveredChatCredits: 0,
+    coveredDebugCredits: 0,
+    topUpCredits: 0,
+    chatOnlyTurns: 0,
+    chatOnlyCredits: 0,
+    droppedCliCredits: 0
+  };
+  // Approximate at the period boundary: rows before startMs are ignored.
+  resolveOverlaps(entries.filter((e) => Date.parse(e.timestamp) >= startMs), stats);
+  return stats;
 }
 
 /** De-duplicated entries that fall within the selected period (and on/after

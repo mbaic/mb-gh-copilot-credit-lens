@@ -17,9 +17,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   written to disk by the CLI).
 - **No-folder windows are scanned**: `globalStorage/emptyWindowChatSessions` and
   `globalStorage/github.copilot-chat/debug-logs`, shown as workspace "(no folder)".
-- **No double counting across sources** (`resolveOverlaps`): a debug log replaces
-  the chat turns it covers; a CLI session that also wrote a VS Code debug log is
-  counted once.
+- **No double counting across sources** (`resolveOverlaps`): per chat turn, the
+  larger of the turn's billed total and its debug-log calls counts (debug rows
+  plus a request-less top-up); a CLI session that also wrote a VS Code debug log
+  is counted once. Each sync logs a per-source breakdown to the Output channel.
 - **Ledger schema v2**: on first load, rows and cursors from the old generic
   chat/CLI parsing are dropped and re-read; imported debug-log rows are kept.
 

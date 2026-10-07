@@ -33,8 +33,11 @@ Small, single-purpose modules with a deliberate split (UI vs. logic vs. I/O):
   ledger together. Adding a source touches only paths/parsers/scanner.
 - **`src/aggregate.ts`** — pure period filtering and aggregation into
   `DashboardData` (KPIs, daily series, by-model/source/workspace, trust chip).
-  `resolveOverlaps()` removes cross-source double counting on read (a debug log
-  replaces the chat turns it covers; a CLI session with a debug log is dropped).
+  `resolveOverlaps()` removes cross-source double counting on read: per chat
+  turn window, the larger of the turn's billed total and its debug-log calls
+  counts (debug rows kept, any chat surplus added as a request-less top-up); a
+  CLI session with a debug log is dropped. Per-source figures are logged to the
+  Output channel after each scan.
 - **`src/csv.ts`** — `toCsv(entries)`, RFC-4180-style escaping.
 - **`src/dashboard.ts`** — the webview: HTML shell + inline CSS + a nonce'd inline
   script that renders hand-built HTML/CSS charts (daily bars with value labels +
