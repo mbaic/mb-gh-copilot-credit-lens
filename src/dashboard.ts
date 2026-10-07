@@ -364,7 +364,7 @@ function render() {
   const periodSub = rate > 0 ? breakdown + ' · ≈ ' + fmtUsd(cost) : breakdown;
   document.getElementById('kpiPeriodSub').textContent = periodSub;
   document.getElementById('kpiToday').textContent = fmt(data.kpis.creditsToday);
-  document.getElementById('scopeNote').textContent = 'Counts Copilot usage recorded in local files on this machine (VS Code chat sessions, agent debug logs, Copilot CLI). Usage that never reaches this machine — Coding Agent and code review on github.com, other computers or editors — is not included, so compare with "Credits Used" in VS Code\'s Copilot status menu for your account total.';
+  document.getElementById('scopeNote').textContent = 'Counts Copilot usage recorded in local files on this machine (VS Code chat sessions, agent debug logs, Copilot CLI). Usage that never reaches this machine — Coding Agent and code review on github.com, other computers or editors — is not included, so compare with "Credits Used" in the Copilot status menu of VS Code for your account total.';
   document.getElementById('kpiRequests').textContent = fmtInt(data.kpis.requests);
   document.getElementById('kpiModel').textContent = data.kpis.topModel;
 
