@@ -3,6 +3,20 @@
 All notable changes to **GitHub Copilot Credit Lens** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0]
+
+### Removed
+- **"Include estimated credits" dashboard toggle** and the `Exact / Mixed /
+  Estimated` trust chip.
+- **Model rate table** (`src/rates.ts`), the `ccl rates` command and the
+  `rates.json` override file.
+- **CLI flags `--estimated` / `--no-estimated`** and the `CCL_INCLUDE_ESTIMATED`
+  environment variable.
+- **Unknown-model warning.**
+- **CSV columns `creditsEstimated` and `isEstimated`** (`creditsExact` remains).
+- **Estimated credits.** A record with no billing value now counts as 0 credits
+  and is never guessed; only exact billed values are shown.
+
 ## [1.1.0]
 
 ### Changed

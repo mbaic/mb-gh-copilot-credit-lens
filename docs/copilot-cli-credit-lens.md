@@ -1,5 +1,7 @@
 # Copilot Credit Lens for the GitHub Copilot CLI — Implementation Spec
 
+> **Note (v1.2):** estimated credits, `rates.ts`, the trust chip and the `--estimated` flag described below were removed; credits are exact billed values only.
+
 > **Status:** ✅ **implemented** (both front-ends shipped). This document is the
 > design rationale; for install/usage/testing see
 > [`cli-usage.md`](cli-usage.md).

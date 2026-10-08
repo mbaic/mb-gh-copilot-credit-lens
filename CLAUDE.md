@@ -15,9 +15,6 @@ Small, single-purpose modules with a deliberate split (UI vs. logic vs. I/O):
 
 - **`src/types.ts`** — shared data model (`UsageEntry`, `Ledger`, `PeriodId`,
   `ParseResult`) and `SCHEMA_VERSION`. Pure data, no imports of VS Code or `fs`.
-- **`src/rates.ts`** — the *only* place model→credit multipliers live. Used for
-  **estimation** when a record has no exact billing value. `normalizeModel()`
-  matches the longest known model-family prefix.
 - **`src/paths.ts`** — all platform-specific path logic and file discovery
   (`discoverChatFiles` / `discoverDebugFiles` / `discoverCliFiles`) plus workspace
   name resolution. Missing folders return empty, never throw.
@@ -32,7 +29,7 @@ Small, single-purpose modules with a deliberate split (UI vs. logic vs. I/O):
 - **`src/scanner.ts`** — `runScan(ledger, config)` ties discovery + parsing +
   ledger together. Adding a source touches only paths/parsers/scanner.
 - **`src/aggregate.ts`** — pure period filtering and aggregation into
-  `DashboardData` (KPIs, daily series, by-model/source/workspace, trust chip).
+  `DashboardData` (KPIs, daily series, by-model/source/workspace).
   `resolveOverlaps()` removes cross-source double counting on read: per chat
   turn window, the larger of the turn's billed total and its debug-log calls
   counts (debug rows kept, any chat surplus added as a request-less top-up); a
@@ -62,8 +59,7 @@ When changing code, preserve all of these:
    tolerate missing ones, and never let one bad line/file abort a scan.
 5. **Honest credits.** Exact billing values (chat-session `copilotCredits`,
    debug-log/CLI `copilotUsageNanoAiu`/`totalNanoAiu` / 1e9) are used as-is;
-   estimates are always flagged and excluded from totals unless the user opts
-   in. Keep the exact/estimated/trust distinction intact. The extension only
+   a record without one counts 0 credits — never estimate or guess. The extension only
    reads local files, so its totals are a structural lower bound on real GitHub
    account usage (Coding Agent, PR code review, other machines/editors aren't
    visible locally) — never silently correct or scale for this.
@@ -120,4 +116,4 @@ Develop on the designated feature branch, then merge to `main`.
 This extension bundles no third-party code — **zero runtime dependencies**. All
 code, CSS, and docs are original work under MIT (© Milos Baic). Keep it that way:
 prefer original implementations over copying snippets, and never redistribute
-third-party assets. Model multipliers in `rates.ts` are factual pricing data.
+third-party assets.

@@ -69,6 +69,14 @@ export class LedgerStore {
         Object.entries(fileCursors).filter(([file]) => /[\\/]debug-logs[\\/]/.test(file))
       );
     }
+    // Pre-1.2 rows carried estimate fields; drop them so the ledger shrinks on save.
+    entries = entries.map((e) => {
+      const { creditsEstimated: _est, isEstimated: _flag, ...rest } = e as UsageEntry & {
+        creditsEstimated?: unknown;
+        isEstimated?: unknown;
+      };
+      return rest;
+    });
     return {
       schemaVersion: SCHEMA_VERSION,
       createdAt: l.createdAt ?? new Date().toISOString(),

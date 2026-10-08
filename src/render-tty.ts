@@ -57,8 +57,7 @@ export function renderDashboard(data: DashboardData, opts: RenderOptions): strin
     `${c('dim', ' Credits (period)')}  ${c('bold', fmtCredits(data.kpis.creditsPeriod))}` +
       `   ${c('dim', 'Today')} ${fmtCredits(data.kpis.creditsToday)}` +
       `   ${c('dim', 'Requests')} ${data.kpis.requests}` +
-      `   ${c('dim', 'Top')} ${sanitize(data.kpis.topModel)}` +
-      `   ${trustChip(data.trust, c)}`
+      `   ${c('dim', 'Top')} ${sanitize(data.kpis.topModel)}`
   );
   out.push(rule);
 
@@ -81,13 +80,13 @@ export function renderDashboard(data: DashboardData, opts: RenderOptions): strin
 
   // By model.
   out.push(`${c('bold', ' By model')}${c('dim', '                         credits (requests)')}`);
-  out.push(...bucketLines(data.byModel, opts.top, width, c, data.unknownModels));
+  out.push(...bucketLines(data.byModel, opts.top, width, c));
   out.push(rule);
 
   // By source (compact, one line if it fits).
   out.push(c('bold', ' By source'));
   for (const b of limit(data.bySource, opts.top)) {
-    out.push(bucketLine(b, maxCredits(data.bySource), width, c, false));
+    out.push(bucketLine(b, maxCredits(data.bySource), width, c));
   }
   out.push(rule);
 
@@ -106,55 +105,37 @@ export function renderDashboard(data: DashboardData, opts: RenderOptions): strin
   }
   out.push(rule);
 
-  // Reconciling footer. Only show the "+ estimated = total" arithmetic when
-  // estimates are actually included in the total; otherwise estimates are a
-  // separate, clearly-excluded figure so the math always ties out honestly.
-  const estReqWord = data.estimatedRequestCount === 1 ? 'request' : 'requests';
-  const reconcile = data.includeEstimated
-    ? `${c('dim', ' Exact')} ${fmtCredits(data.totals.exactCredits)} ${c('dim', '+ estimated')} ` +
-      `${fmtCredits(data.totals.fallbackCredits)} ${c('dim', '=')} ${c('bold', fmtCredits(data.kpis.creditsPeriod))} ${c('dim', 'credits')}`
-    : `${c('dim', ' Exact')} ${c('bold', fmtCredits(data.totals.exactCredits))} ${c('dim', 'credits')}` +
-      (data.totals.fallbackCredits > 0
-        ? c('dim', `   (+ ${fmtCredits(data.totals.fallbackCredits)} estimated, excluded)`)
-        : '');
+  // Footer: credits, cost, tokens.
+  const credits = `${c('dim', ' Credits')} ${c('bold', fmtCredits(data.kpis.creditsPeriod))}`;
   const cost =
     data.usdPerCredit > 0
       ? `   ${c('dim', '·')}   ${c('dim', '≈')} $${(data.kpis.creditsPeriod * data.usdPerCredit).toFixed(2)} ${c('dim', `@ $${data.usdPerCredit}/credit`)}`
       : '';
-  out.push(reconcile + cost);
+  out.push(credits + cost);
   out.push(
     `${c('dim', ' ')}${data.kpis.requests} requests · ${humanInt(data.totals.inputTokens)} in · ` +
-      `${humanInt(data.totals.outputTokens)} out · ${humanInt(data.totals.cachedTokens)} cached` +
-      (data.estimatedRequestCount > 0 ? c('dim', `    (${data.estimatedRequestCount} estimated ${estReqWord})`) : '')
+      `${humanInt(data.totals.outputTokens)} out · ${humanInt(data.totals.cachedTokens)} cached`
   );
-  if (!data.includeEstimated && data.estimatedRequestCount > 0) {
-    out.push(c('dim', ' Estimates are excluded from the total above. Use --estimated to include them.'));
-  }
-  if (data.unknownModels.length > 0) {
-    out.push(c('yellow', ` ⚠ Unknown model(s): ${sanitize(data.unknownModels.join(', '))} (estimated with the default multiplier)`));
-  }
 
   return out.join('\n') + '\n';
 }
 
 /** A list of bucket rows with a bar and `credits (requests)` label. */
-function bucketLines(buckets: Bucket[], top: number, width: number, c: Colorizer, unknown: string[]): string[] {
+function bucketLines(buckets: Bucket[], top: number, width: number, c: Colorizer): string[] {
   if (buckets.length === 0) {
     return [c('dim', '   (none)')];
   }
   const max = maxCredits(buckets);
-  const unknownSet = new Set(unknown);
-  return limit(buckets, top).map((b) => bucketLine(b, max, width, c, unknownSet.has(b.label)));
+  return limit(buckets, top).map((b) => bucketLine(b, max, width, c));
 }
 
-function bucketLine(b: Bucket, max: number, width: number, c: Colorizer, flagged: boolean): string {
+function bucketLine(b: Bucket, max: number, width: number, c: Colorizer): string {
   const label = sanitize(b.label);
   const nameW = Math.max(14, Math.floor(width * 0.28));
   const barW = Math.max(6, Math.floor(width * 0.32));
   const name = truncate(label, nameW).padEnd(nameW);
   const value = `${fmtCredits(b.credits)} (${b.requests})`;
-  const warn = flagged ? c('yellow', '  ⚠ unknown') : '';
-  return `  ${name} ${c('cyan', bar(b.credits, max, barW))} ${value}${warn}`;
+  return `  ${name} ${c('cyan', bar(b.credits, max, barW))} ${value}`;
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -166,19 +147,6 @@ function makeColorizer(enabled: boolean): Colorizer {
     return (_style, text) => text;
   }
   return (style, text) => `${STYLE[style]}${text}${RESET}`;
-}
-
-function trustChip(trust: DashboardData['trust'], c: Colorizer): string {
-  switch (trust) {
-    case 'exact':
-      return c('green', '● exact');
-    case 'mixed':
-      return c('yellow', '● mixed');
-    case 'estimated':
-      return c('red', '● estimated');
-    default:
-      return c('dim', '● no data');
-  }
 }
 
 /** Eighth-block bar scaled to `max`, `width` cells wide. */

@@ -26,13 +26,8 @@ export interface UsageEntry {
   outputTokens: number;
   cachedTokens: number;
   /** Exact credits billed (copilotUsageNanoAiu / 1e9), or null when the source
-   *  record carried no authoritative billing field. */
+   *  record carried no billing field. Null counts as 0 — credits are never guessed. */
   creditsExact: number | null;
-  /** Best-effort estimated credits derived from the model rate table. Always
-   *  populated so the dashboard can offer an "include estimates" view. */
-  creditsEstimated: number;
-  /** True when creditsExact is null (i.e. the only credit figure is an estimate). */
-  isEstimated: boolean;
   /** Model requests this entry represents. Absent = 1 (one entry per call/turn).
    *  CLI per-session totals carry their real count; a session-level credit
    *  remainder carries 0 so it adds credits without inflating request counts. */

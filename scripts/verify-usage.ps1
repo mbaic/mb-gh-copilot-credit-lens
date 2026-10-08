@@ -31,7 +31,7 @@ $files = foreach ($r in $roots) {
 }
 
 $monthStart = Get-Date -Day 1 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
-$all   = [pscustomobject]@{ Requests = 0; ExactCredits = 0.0; Estimated = 0; InputTokens = 0; OutputTokens = 0; CachedTokens = 0 }
+$all   = [pscustomobject]@{ Requests = 0; ExactCredits = 0.0; NoBilling = 0; InputTokens = 0; OutputTokens = 0; CachedTokens = 0 }
 $month = [pscustomobject]@{ Requests = 0; ExactCredits = 0.0 }
 $byModel = @{}
 
@@ -50,7 +50,7 @@ foreach ($f in $files) {
 
     $credit = if ($hasNano) { [double]$a.copilotUsageNanoAiu / 1e9 } else { $null }
     $all.Requests++
-    if ($null -ne $credit) { $all.ExactCredits += $credit } else { $all.Estimated++ }
+    if ($null -ne $credit) { $all.ExactCredits += $credit } else { $all.NoBilling++ }
     if (Has $a 'inputTokens')  { $all.InputTokens  += [long]$a.inputTokens }
     if (Has $a 'outputTokens') { $all.OutputTokens += [long]$a.outputTokens }
     if (Has $a 'cachedTokens') { $all.CachedTokens += [long]$a.cachedTokens }
@@ -75,10 +75,10 @@ Write-Host ""
 Write-Host "=== Copilot Credit Lens - independent verification ===" -ForegroundColor Green
 Write-Host ("Debug-log files scanned : {0}" -f @($files).Count)
 Write-Host ""
-Write-Host "ALL TIME  (compare to dashboard period = 'All time', estimates OFF)"
+Write-Host "ALL TIME  (compare to dashboard period = 'All time')"
 Write-Host ("  Requests (metered)    : {0}" -f $all.Requests)
 Write-Host ("  Exact credits (AIU)   : {0}" -f [math]::Round($all.ExactCredits, 4))
-Write-Host ("  Requests w/o exact    : {0}  (shown as estimated in the extension)" -f $all.Estimated)
+Write-Host ("  Requests w/o billing  : {0}  (counted as 0)" -f $all.NoBilling)
 Write-Host ("  Input tokens          : {0}" -f $all.InputTokens)
 Write-Host ("  Output tokens         : {0}" -f $all.OutputTokens)
 Write-Host ("  Cached tokens         : {0}" -f $all.CachedTokens)

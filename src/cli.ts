@@ -18,8 +18,7 @@ import { aggregate, filterByPeriod } from './aggregate';
 import { toCsv } from './csv';
 import { cliSessionRoot } from './paths';
 import { renderDashboard } from './render-tty';
-import { CclConfig, resolveConfig, storageDir, billingStartMs, isPeriod, ratesOverridePath, loadRatesOverrides } from './config';
-import { applyRateOverrides, effectiveRates } from './rates';
+import { CclConfig, resolveConfig, storageDir, billingStartMs, isPeriod } from './config';
 
 /** The CLI tool only ever scans the Copilot CLI source — never VS Code storage. */
 const CLI_SCAN: ScanConfig = { roots: [] }; // Copilot CLI sessions only
@@ -32,7 +31,6 @@ interface Flags {
   yes: boolean;
   noSync: boolean;
   all: boolean;
-  estimated?: boolean;
   color?: boolean;
   period?: string;
   label?: string;
@@ -51,16 +49,6 @@ async function main(argv: string[]): Promise<number> {
   if (flags.version || command === 'version') {
     process.stdout.write(`copilot-credit-lens ${readVersion()}\n`);
     return 0;
-  }
-
-  // Load user rate overrides before any sync/estimation work.
-  const rateOverrides = await loadRatesOverrides();
-  if (Object.keys(rateOverrides).length > 0) {
-    applyRateOverrides(rateOverrides);
-  }
-
-  if (command === 'rates') {
-    return cmdRates(rateOverrides);
   }
 
   const cfg = applyFlags(await resolveConfig(), flags);
@@ -157,27 +145,6 @@ async function cmdClear(ledger: LedgerStore, flags: Flags): Promise<number> {
   return 0;
 }
 
-function cmdRates(userOverrides: Record<string, number>): number {
-  const rates = effectiveRates();
-  const overrideKeys = new Set(Object.keys(userOverrides));
-  const overridePath = ratesOverridePath();
-
-  process.stdout.write('Estimation rates — credits per request (used when exact billing is absent):\n\n');
-  for (const [model, rate] of Object.entries(rates).sort(([a], [b]) => a.localeCompare(b))) {
-    const tag = overrideKeys.has(model) ? '  ← override' : '';
-    process.stdout.write(`  ${model.padEnd(28)} ${rate}${tag}\n`);
-  }
-  process.stdout.write(`  ${'(unknown models — fallback)'.padEnd(28)} 1\n`);
-  process.stdout.write(`\nOverride file: ${overridePath}\n`);
-  process.stdout.write('\nTo add a new model or correct a rate, create/edit that file, e.g.:\n');
-  process.stdout.write('  { "my-new-model": 0.5, "claude-new-opus": 20 }\n');
-  process.stdout.write('\nPrefix matching: an entry "claude-opus" covers claude-opus-4.8, claude-opus-4.9, etc.\n');
-  process.stdout.write('After editing, re-import so stored estimates are recomputed:\n');
-  process.stdout.write('  ccl clear --yes && ccl sync\n');
-  process.stdout.write('\nRate source: https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing\n');
-  return 0;
-}
-
 async function cmdWatch(ledger: LedgerStore, cfg: CclConfig, flags: Flags): Promise<number> {
   const root = cliSessionRoot();
   await runScan(ledger, CLI_SCAN);
@@ -225,7 +192,6 @@ function buildData(ledger: LedgerStore, cfg: CclConfig): ReturnType<typeof aggre
   return aggregate(
     ledger.entries,
     cfg.period,
-    cfg.includeEstimated,
     ledger.resetMarkers,
     ledger.lastScanAt,
     new Date(),
@@ -277,9 +243,6 @@ function applyFlags(cfg: CclConfig, flags: Flags): CclConfig {
   const next: CclConfig = { ...cfg };
   if (flags.period && isPeriod(flags.period)) {
     next.period = flags.period;
-  }
-  if (flags.estimated !== undefined) {
-    next.includeEstimated = flags.estimated;
   }
   if (flags.top !== undefined && Number.isFinite(flags.top)) {
     next.top = Math.max(0, flags.top);
@@ -333,12 +296,6 @@ function parseArgs(argv: string[]): { command: string; flags: Flags } {
         break;
       case 'no-sync':
         flags.noSync = true;
-        break;
-      case 'estimated':
-        flags.estimated = true;
-        break;
-      case 'no-estimated':
-        flags.estimated = false;
         break;
       case 'color':
         flags.color = true;
@@ -394,15 +351,12 @@ COMMANDS
   export      Export usage: --csv (period-scoped) or --json (full ledger backup).
   clear       Wipe the tool's own ledger (requires --yes). Never touches Copilot logs.
   watch       Live view: re-scan and re-render when CLI sessions change. Ctrl-C to stop.
-  rates       Show estimation rates and the path to the local override file.
   version     Print the version.
   help        Show this help.
 
 FLAGS
   --period <id>      currentMonth | last3Months | last6Months | last9Months |
                      last12Months | sinceReset | allTime   (default: currentMonth)
-  --estimated        Include estimated credits in totals (default: exact only).
-  --no-estimated     Force exact-only totals.
   --top <n|all>      Rows in by-model / by-workspace lists (default: all).
   --no-color         Disable ANSI colour (also honours the NO_COLOR env var).
   --width <n>        Render width in columns (default: terminal width or 80).
@@ -414,7 +368,7 @@ FLAGS
   --yes              With "clear": confirm the wipe.
 
 ENVIRONMENT
-  CCL_PERIOD, CCL_INCLUDE_ESTIMATED, CCL_USD_PER_CREDIT, CCL_BILLING_START,
+  CCL_PERIOD, CCL_USD_PER_CREDIT, CCL_BILLING_START,
   CCL_BACKUP_DIR        Override defaults (lower precedence than flags).
   NO_COLOR              Disable colour.
 

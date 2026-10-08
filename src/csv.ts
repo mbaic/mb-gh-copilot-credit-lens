@@ -12,9 +12,7 @@ const COLUMNS: { header: string; get: (e: UsageEntry) => string | number }[] = [
   { header: 'inputTokens', get: (e) => e.inputTokens },
   { header: 'outputTokens', get: (e) => e.outputTokens },
   { header: 'cachedTokens', get: (e) => e.cachedTokens },
-  { header: 'creditsExact', get: (e) => (e.creditsExact === null ? '' : e.creditsExact) },
-  { header: 'creditsEstimated', get: (e) => e.creditsEstimated },
-  { header: 'isEstimated', get: (e) => (e.isEstimated ? 'true' : 'false') }
+  { header: 'creditsExact', get: (e) => (e.creditsExact === null ? '' : e.creditsExact) }
 ];
 
 /** Render entries as RFC-4180-style CSV (newest first). */

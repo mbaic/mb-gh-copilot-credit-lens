@@ -66,7 +66,6 @@ See [section 3](#3-copilot-cli-extension-credits) below.
 | `ccl export --json [-o file]` | Full ledger backup (`-o`) or entries to stdout |
 | `ccl clear --yes` | Wipe the tool's own ledger (never your Copilot logs) |
 | `ccl watch` | Live view: re-scan + re-render on change. Ctrl-C to stop |
-| `ccl rates` | Show current estimation rates and the override file path |
 | `ccl version` / `ccl help` | Version / usage |
 
 ### Flags
@@ -74,7 +73,6 @@ See [section 3](#3-copilot-cli-extension-credits) below.
 | Flag | Meaning |
 |---|---|
 | `--period <id>` | `currentMonth` · `last3Months` · `last6Months` · `last9Months` · `last12Months` · `sinceReset` · `allTime` |
-| `--estimated` / `--no-estimated` | Include / exclude estimated credits in the total |
 | `--top <n\|all>` | Rows in *by model* / *by workspace* lists |
 | `--no-color` | Disable ANSI colour (also honours `NO_COLOR`) |
 | `--width <n>` | Render width (default: terminal width, else 80) |
@@ -86,13 +84,12 @@ See [section 3](#3-copilot-cli-extension-credits) below.
 
 ### Configuration (precedence: flags > env > config file > defaults)
 
-- **Env vars:** `CCL_PERIOD`, `CCL_INCLUDE_ESTIMATED`, `CCL_USD_PER_CREDIT`,
+- **Env vars:** `CCL_PERIOD`, `CCL_USD_PER_CREDIT`,
   `CCL_BILLING_START`, `CCL_BACKUP_DIR`, `NO_COLOR`.
 - **Config file** (`config.json` in the data directory), e.g.:
   ```json
   {
     "period": "allTime",
-    "includeEstimated": false,
     "usdPerCredit": 0.01,
     "billingStartDate": "2026-06-01",
     "top": 0
@@ -148,7 +145,6 @@ gh copilot          # or: copilot
 
 # 7. Use the command:
 /credits
-/credits allTime --estimated
 /credits last3Months --no-color
 ```
 
@@ -167,7 +163,6 @@ gh copilot   # or: copilot
 
 # Inside the session:
 /credits
-/credits allTime --estimated
 ```
 
 ### Important: interactive session required
@@ -182,59 +177,7 @@ Slash commands (`/credits`, `/extensions`, etc.) only work inside an
 
 ---
 
-## 4. Keeping model rates up to date
-
-`ccl` estimates credits when your Copilot CLI logs don't include exact billing
-values (`copilotUsageNanoAiu`). The estimates use a built-in rate table
-(see `src/rates.ts`). When GitHub adds a new model or changes a rate:
-
-### Option A — Update the tool (recommended)
-
-Download the latest `.tgz` from the
-[releases page](https://github.com/mbaic/mb-gh-copilot-credit-lens/releases/latest)
-and reinstall:
-
-```powershell
-npm i -g .\mb-gh-copilot-credit-lens-<v>.tgz
-ccl clear --yes && ccl sync
-```
-
-### Option B — Local override (immediate, no reinstall)
-
-Create a `rates.json` file in the tool's data directory with your additions:
-
-**Windows:** `%APPDATA%\copilot-credit-lens\rates.json`  
-**macOS:** `~/Library/Application Support/copilot-credit-lens/rates.json`  
-**Linux:** `~/.local/share/copilot-credit-lens/rates.json`
-
-```json
-{
-  "my-new-model": 0.5,
-  "claude-new-opus": 20
-}
-```
-
-Keys are **model prefixes** — an entry `"claude-opus"` covers
-`claude-opus-4.8`, `claude-opus-4.9`, etc. (longest prefix wins).
-
-After editing `rates.json`, re-import so stored estimates are recomputed:
-
-```powershell
-ccl clear --yes && ccl sync
-```
-
-### View current rates
-
-```bash
-ccl rates
-```
-
-Shows all effective rates (built-in + any overrides) and prints the exact path
-to your override file.
-
----
-
-## 5. Testing
+## 4. Testing
 
 ### Basic workflow test
 
@@ -244,11 +187,14 @@ gh copilot explain "ls -la"
 
 # Import and view:
 ccl sync
-ccl dashboard --estimated
+ccl dashboard
 ```
 
-Expected: Dashboard shows requests, model `gpt-5.4-mini` (or whichever model
-was used), estimated credits at 0.33/request, trust chip `● estimated`.
+Expected: Dashboard shows the new requests and their model (e.g. `gpt-5.4-mini`,
+or whichever model was used). Credits are exact billed values only: a request
+whose log entry has no billing value counts as 0 and is never guessed. The
+footer reads like `Credits 39.20 · ≈ $0.39 @ $0.01/credit`, followed by the
+requests/tokens line.
 
 ### Smoke test with synthetic data (isolated, no real logs touched)
 
@@ -268,23 +214,8 @@ node out/cli.js sync
 node out/cli.js dashboard --period allTime --no-color --no-sync
 ```
 
-Expected: 1 file, 3 entries, 1 warning. Exact total = 3.5 credits. With
-`--estimated` = 4.5 credits. Trust chip = `● mixed`.
-
-### Rates override test
-
-```bash
-# Create an override:
-mkdir -p ~/.local/share/copilot-credit-lens
-echo '{"gpt-5": 2.5}' > ~/.local/share/copilot-credit-lens/rates.json
-
-ccl rates              # shows gpt-5 at 2.5 with "← override" label
-ccl clear --yes        # wipe stale estimates
-ccl sync               # re-import with new rate
-ccl dashboard --estimated
-```
-
-Expected: `gpt-5` requests now show 2.5 credits each.
+Expected: 1 file, 3 entries, 1 warning. Total = 3.5 credits (the third record
+has no billing value, so it adds 0). The footer shows `Credits 3.50`.
 
 ### Confirm VSIX is unaffected
 
@@ -299,7 +230,7 @@ The packaged file list must **not** include `out/cli.js`, `out/render-tty.js`,
 
 ---
 
-## 6. Security & offline posture
+## 5. Security & offline posture
 
 - **No network calls, no `child_process`, no `eval`** — local file reads via
   `fs/promises` only.

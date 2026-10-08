@@ -49,8 +49,6 @@ expected value; nothing here is a commitment to a date.
 
 ## Maintenance notes
 
-- **Model rates** live solely in `src/rates.ts` — update multipliers there when
-  GitHub changes premium-request pricing.
 - **Adding a source** = implement discovery in `src/paths.ts`, extend field
   aliases in `src/parsers.ts` if needed, and register it in `src/scanner.ts`.
 - **Ledger schema changes** bump `SCHEMA_VERSION` in `src/types.ts`; `normalize()`

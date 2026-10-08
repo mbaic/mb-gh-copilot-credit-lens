@@ -17,7 +17,6 @@ import { PeriodId } from './types';
 /** Resolved runtime configuration for the standalone CLI. */
 export interface CclConfig {
   period: PeriodId;
-  includeEstimated: boolean;
   usdPerCredit: number;
   /** YYYY-MM-DD. Clamped to the billing floor by billingStartMs(). */
   billingStartDate: string;
@@ -46,7 +45,6 @@ export const VALID_PERIODS: readonly PeriodId[] = [
 
 export const DEFAULT_CONFIG: CclConfig = {
   period: 'currentMonth',
-  includeEstimated: false,
   usdPerCredit: 0.01,
   billingStartDate: BILLING_FLOOR,
   backupDirectory: '',
@@ -73,35 +71,6 @@ export function configFilePath(): string {
   return path.join(storageDir(), 'config.json');
 }
 
-/** Path to the optional user-editable rate overrides file. */
-export function ratesOverridePath(): string {
-  return path.join(storageDir(), 'rates.json');
-}
-
-/**
- * Load user rate overrides from rates.json in the storage directory.
- * Returns {} when absent, empty, or malformed — never throws.
- * Only numeric, finite, non-negative values are accepted; all else ignored.
- */
-export async function loadRatesOverrides(): Promise<Record<string, number>> {
-  try {
-    const raw = await fsp.readFile(ratesOverridePath(), 'utf8');
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return {};
-    }
-    const result: Record<string, number> = {};
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) {
-        result[k] = v;
-      }
-    }
-    return result;
-  } catch {
-    return {};
-  }
-}
-
 /** Inclusive billing-start epoch (ms), never earlier than the billing floor. */
 export function billingStartMs(cfg: CclConfig): number {
   const floor = Date.parse(`${BILLING_FLOOR}T00:00:00Z`);
@@ -120,9 +89,6 @@ function mergeConfig(base: CclConfig, patch: Partial<Record<keyof CclConfig, unk
   const next: CclConfig = { ...base };
   if (typeof patch.period === 'string' && isPeriod(patch.period)) {
     next.period = patch.period;
-  }
-  if (typeof patch.includeEstimated === 'boolean') {
-    next.includeEstimated = patch.includeEstimated;
   }
   if (typeof patch.usdPerCredit === 'number' && Number.isFinite(patch.usdPerCredit) && patch.usdPerCredit >= 0) {
     next.usdPerCredit = patch.usdPerCredit;
@@ -162,9 +128,6 @@ function readEnv(): Partial<Record<keyof CclConfig, unknown>> {
   const patch: Partial<Record<keyof CclConfig, unknown>> = {};
   if (env.CCL_PERIOD) {
     patch.period = env.CCL_PERIOD;
-  }
-  if (env.CCL_INCLUDE_ESTIMATED) {
-    patch.includeEstimated = /^(1|true|yes|on)$/i.test(env.CCL_INCLUDE_ESTIMATED);
   }
   if (env.CCL_USD_PER_CREDIT) {
     patch.usdPerCredit = Number(env.CCL_USD_PER_CREDIT);

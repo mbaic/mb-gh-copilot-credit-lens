@@ -17,7 +17,6 @@ import * as fsp from 'fs/promises';
 import * as crypto from 'crypto';
 import { DiscoveredFile } from './paths';
 import { ParseResult, UsageEntry } from './types';
-import { estimateCredits } from './rates';
 
 const NANO_PER_AIU = 1_000_000_000;
 const NEWLINE = 0x0a;
@@ -157,7 +156,6 @@ function toEntry(obj: unknown, file: DiscoveredFile, fallbackTs: string): UsageE
   );
 
   const creditsExact = nanoAiu === undefined ? null : round4(nanoAiu / NANO_PER_AIU);
-  const creditsEstimated = round4(estimateCredits(model));
 
   const id = hashId([
     file.source,
@@ -180,9 +178,7 @@ function toEntry(obj: unknown, file: DiscoveredFile, fallbackTs: string): UsageE
     inputTokens: inputTokens ?? 0,
     outputTokens: outputTokens ?? 0,
     cachedTokens: cachedTokens ?? 0,
-    creditsExact,
-    creditsEstimated,
-    isEstimated: creditsExact === null
+    creditsExact
   };
 }
 
@@ -293,9 +289,7 @@ function parseChatSession(text: string, file: DiscoveredFile, fallbackTs: string
       inputTokens: inputTokens ?? 0,
       outputTokens: outputTokens ?? 0,
       cachedTokens: 0,
-      creditsExact: credits ?? null,
-      creditsEstimated: round4(estimateCredits(model)),
-      isEstimated: credits === undefined
+      creditsExact: credits ?? null
     });
   }
 
@@ -308,8 +302,6 @@ function parseChatSession(text: string, file: DiscoveredFile, fallbackTs: string
       inputTokens: 0,
       outputTokens: 0,
       creditsExact: round4(remainder),
-      creditsEstimated: 0,
-      isEstimated: false,
       requests: 0
     });
   }
@@ -405,8 +397,6 @@ function parseCliEvents(text: string, file: DiscoveredFile, fallbackTs: string, 
       outputTokens: finiteNumber(usage.outputTokens) ?? 0,
       cachedTokens: finiteNumber(usage.cacheReadTokens) ?? 0,
       creditsExact: nano === undefined ? null : round4(nano / NANO_PER_AIU),
-      creditsEstimated: round4(estimateCredits(name) * requests),
-      isEstimated: nano === undefined,
       requests
     });
   }
@@ -426,8 +416,6 @@ function parseCliEvents(text: string, file: DiscoveredFile, fallbackTs: string, 
       outputTokens: 0,
       cachedTokens: 0,
       creditsExact: round4(surplus / NANO_PER_AIU),
-      creditsEstimated: 0,
-      isEstimated: false,
       requests: 0
     });
   }

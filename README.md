@@ -13,7 +13,7 @@ Since Copilot moved to usage-based billing, every premium request spends AI Cred
 - **Private by design** — your data never leaves the machine. The extension makes **zero network calls** and sends **zero telemetry**.
 - **No supply-chain risk** — **zero runtime dependencies**, distributed as a local `.vsix` (never the Marketplace, no auto-update).
 - **Durable** — usage is copied into the extension's own ledger, so it survives Copilot rotating or deleting its log files.
-- **Honest numbers** — when a record carries an exact billing value it is used as-is; otherwise the credit figure is clearly labelled as an estimate and excluded from totals unless you opt in.
+- **Honest numbers** — only exact billing values from your local files are counted, used as-is. A record without one counts as 0 credits; nothing is ever guessed.
 - **Read-only** — Copilot's own files are never modified.
 
 ## What it tracks
@@ -35,10 +35,9 @@ source before and after de-duplication.
 
 - **KPI strip:** credits this period, credits today, request count, top model.
 - **Charts:** credits per day (with value labels + hover tooltips), plus by-model and by-source bars labelled `credits (requests)` — all hand-built, no charting library.
-- **Workspace table** with readable project names, and **token totals** that reconcile with the headline (`Exact + Estimated = Credits this period`).
+- **Workspace table** with readable project names, and **token totals** that reconcile with the headline.
 - **Top 5 / Top 10 / All** filters on the by-model and by-workspace lists.
 - **Period selector:** current month · rolling 3 / 6 / 9 / 12 months · since last reset · all time.
-- **Exact vs estimated** toggle and an `Exact / Mixed / Estimated` trust chip.
 - **Tooltips** on every chart, control and stat explaining what it shows.
 - A compact **status-bar** item (`⚡ AIU this period`) opens the dashboard on click.
 
@@ -89,7 +88,6 @@ All under `copilotCreditLens.*`:
 | `usdPerCredit` | `0.01` | USD per AI Credit for cost estimates (`0` hides cost) |
 
 All sources are always scanned on startup and watched while VS Code is open.
-The *Include estimated credits* toggle lives on the dashboard.
 
 Multiple profiles? Point `additionalRoots` at the other profile's folder that contains `workspaceStorage`.
 
@@ -149,7 +147,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\verify-usage.ps1 -AdditionalR
 
 It prints all-time and current-period requests, exact credits, tokens, and a
 by-model table. Compare against the dashboard (period **All time** / **Current
-period**, estimates off). They should match; the script is read-only and makes
+period**). They should match; the script is read-only and makes
 no network calls.
 
 ## Installation
@@ -211,24 +209,7 @@ Start an **interactive** Copilot CLI session (`gh copilot` or `copilot` — no s
 > coding agent (workspace sessions with `workspace.yaml`) uses a different format
 > and is not tracked by these tools.
 
-Both terminal tools read only `~/.copilot/session-state/*/events.jsonl` (read-only), keep their own separate ledger, and make **zero network calls**. Full commands, flags, rates configuration, and a **complete testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**.
-
-### Keeping model rates current
-
-When a new model appears with wrong or default estimates, you have two options:
-
-1. **Reinstall the latest `.tgz`** — rates are updated in each release.
-2. **Local override** — create `rates.json` in the tool's data directory:
-   - Windows: `%APPDATA%\copilot-credit-lens\rates.json`
-   - macOS: `~/Library/Application Support/copilot-credit-lens/rates.json`
-   - Linux: `~/.local/share/copilot-credit-lens/rates.json`
-
-   ```json
-   { "my-new-model": 0.5 }
-   ```
-
-   Then run `ccl clear --yes && ccl sync` to recompute stored estimates.
-   Run `ccl rates` to see all current rates and the exact override file path.
+Both terminal tools read only `~/.copilot/session-state/*/events.jsonl` (read-only), keep their own separate ledger, and make **zero network calls**. Full commands, flags, and a **complete testing guide** are in **[docs/cli-usage.md](docs/cli-usage.md)**.
 
 ## Development
 

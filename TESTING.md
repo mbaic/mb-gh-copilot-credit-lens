@@ -87,9 +87,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\verify-usage.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-usage.ps1 -AdditionalRoots "C:\Users\<you>\AppData\Roaming\Code - Insiders\User"
 ```
 
-Compare its **all-time** output to the dashboard with **Period = All time** and
-**Include estimated credits = off**. Requests, exact credits, tokens and the
-by-model breakdown should match.
+Compare its **all-time** output to the dashboard with **Period = All time**.
+Requests, exact credits, tokens and the by-model breakdown should match.
 
 ---
 
@@ -97,7 +96,6 @@ by-model breakdown should match.
 
 - [ ] Dashboard opens and shows non-zero data after Sync.
 - [ ] **Period** selector: *Current period* = this calendar month; *All time* / *Last 3–12 months* never show anything before **2026-06-01**.
-- [ ] **Include estimated credits** toggle: `Credits this period` = exact when off, exact + estimated when on. (It may not move if the estimated requests are on free models — that's correct; watch the breakdown line under the number.)
 - [ ] **Top 5 / Top 10 / All** on *By model* and *By workspace* changes how many rows show.
 - [ ] **By workspace** shows readable project names (run **Rebuild Workspace Names** if any show as a hash).
 - [ ] **Est. cost (USD)** ≈ credits × $0.01.

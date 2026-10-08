@@ -2,7 +2,6 @@
 // dashboard renders. No VS Code, no I/O — easy to reason about and to test.
 
 import { PeriodId, ResetMarker, UsageEntry } from './types';
-import { isKnownModel } from './rates';
 
 export interface Bucket {
   label: string;
@@ -14,9 +13,7 @@ export interface Bucket {
 export interface DashboardData {
   generatedAt: string;
   period: PeriodId;
-  includeEstimated: boolean;
   lastScanAt: string | null;
-  trust: 'exact' | 'mixed' | 'estimated' | 'none';
   kpis: {
     creditsPeriod: number;
     creditsToday: number;
@@ -28,18 +25,10 @@ export interface DashboardData {
   bySource: Bucket[];
   byWorkspace: Bucket[];
   totals: {
-    exactCredits: number;
-    /** Estimated credits for the requests that had NO exact value. Adds to
-     *  exactCredits to reconcile with creditsPeriod when estimates are included. */
-    fallbackCredits: number;
     inputTokens: number;
     outputTokens: number;
     cachedTokens: number;
   };
-  estimatedRequestCount: number;
-  /** Models seen in this period that aren't in the rate table (estimates use the
-   *  default multiplier). Surfaced so new GitHub models are noticed automatically. */
-  unknownModels: string[];
   /** USD per AI Credit (GitHub usage-based billing: 1 credit = $0.01). Configurable. */
   usdPerCredit: number;
   periods: { id: PeriodId; label: string }[];
@@ -208,8 +197,6 @@ export function resolveOverlaps(entries: readonly UsageEntry[], stats?: OverlapS
           outputTokens: 0,
           cachedTokens: 0,
           creditsExact: round4(gap),
-          creditsEstimated: 0,
-          isEstimated: false,
           requests: 0
         });
       }
@@ -258,11 +245,10 @@ export function filterByPeriod(
   return unique.filter((e) => new Date(e.timestamp).getTime() >= start);
 }
 
-/** Build the full dashboard payload for a period and credit-counting mode. */
+/** Build the full dashboard payload for a period. */
 export function aggregate(
   entries: readonly UsageEntry[],
   period: PeriodId,
-  includeEstimated: boolean,
   markers: readonly ResetMarker[],
   lastScanAt: string | null,
   now: Date = new Date(),
@@ -271,24 +257,20 @@ export function aggregate(
   usdPerCredit = 0
 ): DashboardData {
   const scoped = filterByPeriod(entries, period, markers, now, billingStartMs);
-  const value = (e: UsageEntry): number =>
-    e.creditsExact !== null ? e.creditsExact : includeEstimated ? e.creditsEstimated : 0;
 
   const model = new Map<string, Bucket>();
   const source = new Map<string, Bucket>();
   const workspace = new Map<string, Bucket>();
   const dayCredits = new Map<string, number>();
-  const totals = { exactCredits: 0, fallbackCredits: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  const totals = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
 
   const todayKey = dateKey(now);
   let creditsPeriod = 0;
   let creditsToday = 0;
-  let estimatedRequestCount = 0;
-  let exactCount = 0;
   let requests = 0;
 
   for (const e of scoped) {
-    const credits = value(e);
+    const credits = e.creditsExact ?? 0;
     requests += requestCount(e);
     creditsPeriod += credits;
     const day = dateKey(new Date(e.timestamp));
@@ -301,31 +283,17 @@ export function aggregate(
     addTo(source, SOURCE_LABELS[e.source] ?? e.source, credits, e);
     addTo(workspace, resolveWorkspaceLabel(e, workspaceNames), credits, e);
 
-    if (e.creditsExact !== null) {
-      totals.exactCredits += e.creditsExact;
-      exactCount++;
-    } else {
-      estimatedRequestCount += requestCount(e);
-      totals.fallbackCredits += e.creditsEstimated;
-    }
     totals.inputTokens += e.inputTokens;
     totals.outputTokens += e.outputTokens;
     totals.cachedTokens += e.cachedTokens;
   }
 
   const byModel = sortBuckets(model);
-  const unknownModels = byModel
-    .map((b) => b.label)
-    .filter((label) => label !== 'unknown' && !isKnownModel(label));
-  const trust: DashboardData['trust'] =
-    scoped.length === 0 ? 'none' : estimatedRequestCount === 0 ? 'exact' : exactCount === 0 ? 'estimated' : 'mixed';
 
   return {
     generatedAt: now.toISOString(),
     period,
-    includeEstimated,
     lastScanAt,
-    trust,
     kpis: {
       creditsPeriod: round4(creditsPeriod),
       creditsToday: round4(creditsToday),
@@ -339,14 +307,10 @@ export function aggregate(
     bySource: sortBuckets(source),
     byWorkspace: sortBuckets(workspace),
     totals: {
-      exactCredits: round4(totals.exactCredits),
-      fallbackCredits: round4(totals.fallbackCredits),
       inputTokens: totals.inputTokens,
       outputTokens: totals.outputTokens,
       cachedTokens: totals.cachedTokens
     },
-    estimatedRequestCount,
-    unknownModels,
     usdPerCredit,
     periods: PERIODS
   };

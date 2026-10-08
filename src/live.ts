@@ -14,7 +14,6 @@
 
 import * as crypto from 'crypto';
 import { UsageEntry } from './types';
-import { estimateCredits } from './rates';
 
 const NANO_PER_AIU = 1_000_000_000;
 
@@ -55,7 +54,6 @@ export function mapMetrics(metrics: unknown, sessionId: string): UsageEntry[] {
     const outputTokens = num(usage, ['outputTokens', 'output_tokens', 'completionTokens']);
     const cachedTokens = num(usage, ['cacheReadTokens', 'cachedTokens', 'cache_read_input_tokens']);
     const nanoAiu = num(raw, ['totalNanoAiu', 'copilotUsageNanoAiu', 'usageNanoAiu']);
-    const requestCount = num(isRecord(raw.requests) ? raw.requests : raw, ['count', 'requests', 'requestCount']);
 
     const hasSignal = nanoAiu !== undefined || inputTokens !== undefined || outputTokens !== undefined;
     if (!model || !hasSignal) {
@@ -74,9 +72,7 @@ export function mapMetrics(metrics: unknown, sessionId: string): UsageEntry[] {
       inputTokens: inputTokens ?? 0,
       outputTokens: outputTokens ?? 0,
       cachedTokens: cachedTokens ?? 0,
-      creditsExact,
-      creditsEstimated: round4(estimateCredits(model) * Math.max(1, requestCount ?? 1)),
-      isEstimated: creditsExact === null
+      creditsExact
     });
   }
   return out;

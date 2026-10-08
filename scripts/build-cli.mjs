@@ -19,7 +19,6 @@ const coreDir = join(root, 'extension', 'credit-lens', 'core');
 // Runtime modules the extension shim depends on (no VS Code imports).
 const MODULES = [
   'types.js',
-  'rates.js',
   'csv.js',
   'aggregate.js',
   'ledger.js',

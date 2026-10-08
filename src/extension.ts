@@ -26,7 +26,6 @@ let scanning = false;
 
 // Dashboard view state (independent of stored defaults once the user changes it).
 let period: PeriodId = 'currentMonth';
-let includeEstimated = false;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   log = vscode.window.createOutputChannel('Copilot Credit Lens');
@@ -199,10 +198,6 @@ function handleMessage(msg: WebviewMessage): void {
       period = msg.period as PeriodId;
       refresh();
       break;
-    case 'toggleEstimated':
-      includeEstimated = msg.include;
-      refresh();
-      break;
     case 'sync':
       void syncNow(false);
       break;
@@ -220,7 +215,6 @@ function computeData() {
   return aggregate(
     ledger.entries,
     period,
-    includeEstimated,
     ledger.resetMarkers,
     ledger.lastScanAt,
     new Date(),
@@ -249,11 +243,10 @@ function updateStatusBar(): void {
     statusBar.hide();
     return;
   }
-  // Status bar always reflects exact, current-month credits — the billing figure.
+  // Status bar always reflects current-month credits — the billing figure.
   const data = aggregate(
     ledger.entries,
     'currentMonth',
-    false,
     ledger.resetMarkers,
     ledger.lastScanAt,
     new Date(),

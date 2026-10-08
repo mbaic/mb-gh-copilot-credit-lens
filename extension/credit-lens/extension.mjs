@@ -35,16 +35,12 @@ const { resolveConfig, storageDir, billingStartMs, isPeriod } = core('config.js'
 
 const CLI_SCAN = { roots: [] }; // Copilot CLI sessions only
 
-/** Parse "/credits <period> [--estimated] [--no-color]" argument text. */
+/** Parse "/credits <period> [--no-color]" argument text. */
 function parseArgs(args) {
   const tokens = String(args || '').trim().split(/\s+/).filter(Boolean);
-  const opts = { period: undefined, includeEstimated: undefined, color: true };
+  const opts = { period: undefined, color: true };
   for (const tok of tokens) {
-    if (tok === '--estimated') {
-      opts.includeEstimated = true;
-    } else if (tok === '--no-estimated') {
-      opts.includeEstimated = false;
-    } else if (tok === '--no-color') {
+    if (tok === '--no-color') {
       opts.color = false;
     } else if (isPeriod(tok)) {
       opts.period = tok;
@@ -57,7 +53,6 @@ async function handleCredits({ args, ui, session }) {
   const opts = parseArgs(args);
   const cfg = await resolveConfig();
   const period = opts.period || cfg.period;
-  const includeEstimated = opts.includeEstimated ?? cfg.includeEstimated;
 
   // History from the on-disk ledger, refreshed with a quick CLI-only scan.
   const ledger = new LedgerStore(storageDir());
@@ -78,7 +73,6 @@ async function handleCredits({ args, ui, session }) {
   const data = aggregate(
     [...history, ...live],
     period,
-    includeEstimated,
     ledger.resetMarkers,
     ledger.lastScanAt,
     new Date(),
